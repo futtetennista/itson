@@ -10,21 +10,29 @@ import Network.Wreq hiding (headers)
 import Network.HTTP.Types.URI (decodePathSegments)
 import Control.Lens
 import Data.Aeson.Lens
-import Data.Text hiding (foldr, filter, head, tail, reverse, map)
+import qualified Data.Aeson.Types as AT (Value(String))
+import qualified Data.Text as T (dropWhileEnd, append, empty, splitOn)
 import Data.Text.Encoding (encodeUtf8)
-import qualified Data.ByteString.Char8 as BSC8 (pack, unpack, split)
+import qualified Data.ByteString.Char8 as C8 (pack, unpack, split)
 import Data.Monoid
 import qualified Data.ByteString as BS (empty)
 import Data.ByteString.Builder
 import Data.ByteString.Lazy as BSL (toStrict)
+import qualified Data.Vector as V (filter, null, empty)
 
 -- TODO: all these appends are awful, find a better solution
-buildJson xs = dropWhileEnd (==',') $ foldr (\e json -> append (append (append (pack "\"") e) (pack "\",")) json) empty xs
-buildResponseBody r = append (append (pack "{\"results\":{\"previewUrls\":[") (buildJson $ extractPreviewUrls r)) (pack "]}}")
+buildJson xs = T.dropWhileEnd (==',') $ foldr (\e json -> T.append (T.append (T.append "\"" e) ("\",")) json) T.empty xs
+buildResponseBody r = T.append (T.append "{\"results\":{\"previewUrls\":[" (buildJson $ extractPreviewUrls r)) "]}}"
 extractPreviewUrls r = r ^.. responseBody . key "tracks" . key "items" . values . key "preview_url" . _String
-
+extractAvailableMarkets r =
+                        let mx = r ^.. responseBody . key "tracks" . key "items" . values . key "available_markets" . _Array
+                        in
+                          case mx of
+                               [] -> V.empty
+                               xs -> head mx
+                   
 getQueryParams (Env _ _ _ queryString _ _ _ _ _ _ _ _) =
-               let queryArray = map (splitOn "=") $ splitOn "&" (head $ decodePathSegments queryString)
+               let queryArray = map (T.splitOn "=") $ T.splitOn "&" (head $ decodePathSegments queryString)
                in [ (a, b) | arr <- queryArray, a <- [head arr], b <- tail arr]
 getQueryParamValue p env = snd . head $ filter (\(a, b) -> a == p) (getQueryParams env)
 
@@ -32,16 +40,18 @@ extractRequestHeaders (Env _ _ _ _ _ _ httpHeaders _ _ _ _ _) = httpHeaders
 printableRequestHeaders headers = foldr (\(k, v) hx -> mappend (mappend hx $ mappend (byteString k) (mappend (byteString "=") (byteString v))) (byteString "\n")) (byteString BS.empty) headers
 requestHeadersToBS headers = toStrict $ toLazyByteString (printableRequestHeaders headers)
 getRequestHeader headers hk =
-                 let key = BSC8.pack hk
+                 let key = C8.pack hk
                  in filter (\(k, v) -> k == key) headers
 getRequestHeaderValue headers hk =
                  case getRequestHeader headers hk of
                       []       -> BS.empty
                       [(k, v)] -> v
-getIpFromRequest headers = BSC8.unpack $ head (BSC8.split ':' (getRequestHeaderValue headers "Host"))
+getIpFromRequest headers = C8.unpack $ head (C8.split ':' (getRequestHeaderValue headers "Host"))
 findRequestCountryCode headers =
                        do
-                         r <- get $ "http://www.telize.com/geoip/" ++ getIpFromRequest headers
+                         -- for testing purposes use a static ip
+                         r <- get $ "http://www.telize.com/geoip/2.240.222.127"
+                         -- r <- get $ "http://www.telize.com/geoip/" ++ getIpFromRequest headers
                          return $ r ^. responseBody . key "country_code" . _String
 
 app :: Application
@@ -52,6 +62,9 @@ app = \env ->
   in do
        cc <- findRequestCountryCode $ extractRequestHeaders env
        r <- getWith opts "https://api.spotify.com/v1/search"
-       return $ set_body_bytestring (encodeUtf8 $ buildResponseBody r) (def { headers = [ ("Content-Type", "text/json") ] })
+       if V.null $ V.filter (== AT.String cc) (extractAvailableMarkets r) then
+         return $ set_body_bytestring (encodeUtf8 $ "results {}") (def { headers = [ ("Content-Type", "text/json") ] })
+       else
+         return $ set_body_bytestring (encodeUtf8 $ buildResponseBody r) (def { headers = [ ("Content-Type", "text/json") ] })
 
 main = run app
