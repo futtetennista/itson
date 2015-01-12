@@ -19,18 +19,48 @@ import qualified Data.ByteString as BS (empty)
 import Data.ByteString.Builder
 import Data.ByteString.Lazy as BSL (toStrict)
 import qualified Data.Vector as V (filter, null, empty)
+import qualified Data.Aeson as A
 
--- TODO: all these appends are awful, find a better solution
-buildJson xs = T.dropWhileEnd (==',') $ foldr (\e json -> T.append (T.append (T.append "\"" e) ("\",")) json) T.empty xs
-buildResponseBody r = T.append (T.append "{\"results\":{\"previewUrls\":[" (buildJson $ extractPreviewUrls r)) "]}}"
-extractPreviewUrls r = r ^.. responseBody . key "tracks" . key "items" . values . key "preview_url" . _String
-extractAvailableMarkets r =
-                        let mx = r ^.. responseBody . key "tracks" . key "items" . values . key "available_markets" . _Array
-                        in
-                          case mx of
-                               [] -> V.empty
-                               xs -> head mx
-                   
+-- Models
+data Detail = T String | URLS [String] deriving Show
+data Item = I Detail Detail deriving Show
+data ServiceData = SD { name  :: String
+                      , items :: [Item]
+                      } deriving Show
+data Body = B [ServiceData] deriving Show
+
+instance A.ToJSON Detail where
+         toJSON (T title) = A.object ["title" A..= title]
+         toJSON (URLS xs) = A.object ["previewUrls" A..= xs]
+instance A.ToJSON Item where
+         toJSON (I (T title) (URLS urls)) = A.object ["title" A..= title, "previewUrls" A..= urls]
+instance A.ToJSON ServiceData where
+         toJSON (SD name items) = A.object ["service" A..= name, "items" A..= items]
+
+-- Serialisation
+concatStrings (sep, xs) =
+              let s = (foldr (\e res -> "\"" ++ e ++ "\"" ++ sep ++ res) "" xs)
+              in take (length s - 1) s
+createTitle :: (String, [String]) -> Detail
+createTitle (title, artists)
+            | (not $ null artists) && (not $ null title) = T title ++ " by " ++ concatStrings (",", artists)
+            | null artists = T title
+            | otherwise    = T "Song Details Unknown"
+-- bodyToString :: Body b, Data.ByteString bs => b -> bs
+bodyToString b = A.encode b
+
+-- Parsing
+parsePreviewUrls r = r ^.. responseBody . key "tracks" . key "items" . values . key "preview_url" . _String
+parseArray r k =
+           let mx = r ^.. responseBody . key "tracks" . key "items" . values . key k . _Array
+           in
+           case mx of
+                [] -> V.empty
+                xs -> head mx
+parseAvailableMarkets r = parseArray r "available_markets"
+parseArtists r = parseArray r "artists"
+
+-- Request
 getQueryParams (Env _ _ _ queryString _ _ _ _ _ _ _ _) =
                let queryArray = map (T.splitOn "=") $ T.splitOn "&" (head $ decodePathSegments queryString)
                in [ (a, b) | arr <- queryArray, a <- [head arr], b <- tail arr]
@@ -62,9 +92,9 @@ app = \env ->
   in do
        cc <- findRequestCountryCode $ extractRequestHeaders env
        r <- getWith opts "https://api.spotify.com/v1/search"
-       if V.null $ V.filter (== AT.String cc) (extractAvailableMarkets r) then
+       if V.null $ V.filter (== AT.String cc) (parseAvailableMarkets r) then
          return $ set_body_bytestring (encodeUtf8 $ "results {}") (def { headers = [ ("Content-Type", "text/json") ] })
        else
-         return $ set_body_bytestring (encodeUtf8 $ buildResponseBody r) (def { headers = [ ("Content-Type", "text/json") ] })
+         return $ set_body_bytestring (encodeUtf8 $ "success") (def { headers = [ ("Content-Type", "text/json") ] })
 
 main = run app
