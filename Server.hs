@@ -41,24 +41,33 @@ instance A.ToJSON ServiceData where
 concatStrings (sep, xs) =
               let s = (foldr (\e res -> "\"" ++ e ++ "\"" ++ sep ++ res) "" xs)
               in take (length s - 1) s
-createTitle :: (String, [String]) -> Detail
+createTitle :: (String, [String]) -> String
 createTitle (title, artists)
-            | (not $ null artists) && (not $ null title) = T title ++ " by " ++ concatStrings (",", artists)
-            | null artists = T title
-            | otherwise    = T "Song Details Unknown"
+            | (not $ null artists) && (not $ null title) = title ++ " by " ++ concatStrings (",", artists)
+            | null artists = title
+            | otherwise    = "Song Details Unknown"
+buildItem r = I (T createTitle (parseTitle r, parseArtists r)) (URLS parsePreviewUrls r)
+buildServiceData service r =
+                 SD { name  = service
+                    , items =
+                 -- THIS ISN'T WORKING
+                 let res = zip (map createTitle zip (parseTitles r) (parseArtists s)) (parsePreviewUrls r)
+                 in map (\(t, urls) -> I (T a) (URLS urls)) res
+                    }
+buildBody datax = B datax
 -- bodyToString :: Body b, Data.ByteString bs => b -> bs
 bodyToString b = A.encode b
+-- bodyToString $ buildBody (buildServiceData "Spotify" r)
 
 -- Parsing
-parsePreviewUrls r = r ^.. responseBody . key "tracks" . key "items" . values . key "preview_url" . _String
-parseArray r k =
-           let mx = r ^.. responseBody . key "tracks" . key "items" . values . key k . _Array
-           in
-           case mx of
-                [] -> V.empty
-                xs -> head mx
-parseAvailableMarkets r = parseArray r "available_markets"
-parseArtists r = parseArray r "artists"
+parsePreviewUrls r = r ^.. responseBody . key "tracks" . key "items" . values . key "preview_url"
+parseAvailableMarkets =
+                      let mx = r ^.. responseBody . key "tracks" . key "items" . values . key k . _Array
+                      in case mx of
+                              [] -> V.empty
+                              xs -> head mx
+parseArtists r = r ^.. responseBody . key "tracks" . key "items" . values . key "artists" .values . key "name"
+parseTitles r = r ^.. responseBody . key "tracks" . key "items" . values . key "name"
 
 -- Request
 getQueryParams (Env _ _ _ queryString _ _ _ _ _ _ _ _) =
@@ -95,6 +104,6 @@ app = \env ->
        if V.null $ V.filter (== AT.String cc) (parseAvailableMarkets r) then
          return $ set_body_bytestring (encodeUtf8 $ "results {}") (def { headers = [ ("Content-Type", "text/json") ] })
        else
-         return $ set_body_bytestring (encodeUtf8 $ "success") (def { headers = [ ("Content-Type", "text/json") ] })
+         return $ set_body_bytestring (bodyToString $ buildResponse r) (def { headers = [ ("Content-Type", "text/json") ] })
 
 main = run app
