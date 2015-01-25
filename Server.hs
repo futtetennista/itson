@@ -11,7 +11,7 @@ import Network.HTTP.Types.URI (decodePathSegments)
 import Control.Lens
 import Data.Aeson.Lens
 import qualified Data.Aeson.Types as AT (Value(String))
-import qualified Data.Text as T (dropWhileEnd, append, empty, splitOn)
+import qualified Data.Text as T (dropWhileEnd, append, empty, splitOn, unpack)
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.ByteString.Char8 as C8 (pack, unpack, split)
 import Data.Monoid
@@ -46,13 +46,10 @@ createTitle (title, artists)
             | (not $ null artists) && (not $ null title) = title ++ " by " ++ concatStrings (",", artists)
             | null artists = title
             | otherwise    = "Song Details Unknown"
-buildItem r = I (T createTitle (parseTitle r, parseArtists r)) (URLS parsePreviewUrls r)
+-- buildItem r = I (T $ createTitle (parseTitles r, parseArtists r)) (URLS $ parsePreviewUrls r)
 buildServiceData service r =
                  SD { name  = service
-                    , items =
-                 -- THIS ISN'T WORKING
-                 let res = zip (map createTitle zip (parseTitles r) (parseArtists s)) (parsePreviewUrls r)
-                 in map (\(t, urls) -> I (T a) (URLS urls)) res
+                    , items = [I (T "") (T "")]
                     }
 buildBody datax = B datax
 -- bodyToString :: Body b, Data.ByteString bs => b -> bs
@@ -60,14 +57,13 @@ bodyToString b = A.encode b
 -- bodyToString $ buildBody (buildServiceData "Spotify" r)
 
 -- Parsing
-parsePreviewUrls r = r ^.. responseBody . key "tracks" . key "items" . values . key "preview_url"
-parseAvailableMarkets =
-                      let mx = r ^.. responseBody . key "tracks" . key "items" . values . key k . _Array
+parseAvailableMarkets r =
+                      let mx = r ^.. responseBody . key "tracks" . key "items" . values . key "available_markets" . _Array
                       in case mx of
                               [] -> V.empty
                               xs -> head mx
-parseArtists r = r ^.. responseBody . key "tracks" . key "items" . values . key "artists" .values . key "name"
-parseTitles r = r ^.. responseBody . key "tracks" . key "items" . values . key "name"
+
+parseData r = r ^.. responseBody . key "tracks" . key "items" . _Array . traverse . to (\o -> (o ^? key "name" . _String, o ^? key "preview_url" . _String, o ^? key "external_urls" .key "spotify" . _String, o ^.. key "artists" . _Array . traverse . to (\a -> a ^? key "name" . _String)))
 
 -- Request
 getQueryParams (Env _ _ _ queryString _ _ _ _ _ _ _ _) =
@@ -104,6 +100,6 @@ app = \env ->
        if V.null $ V.filter (== AT.String cc) (parseAvailableMarkets r) then
          return $ set_body_bytestring (encodeUtf8 $ "results {}") (def { headers = [ ("Content-Type", "text/json") ] })
        else
-         return $ set_body_bytestring (bodyToString $ buildResponse r) (def { headers = [ ("Content-Type", "text/json") ] })
+         return $ set_body_bytestring ("") (def { headers = [ ("Content-Type", "text/json") ] })
 
 main = run app
