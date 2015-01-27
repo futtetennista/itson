@@ -21,6 +21,8 @@ import Data.ByteString.Lazy as BSL (toStrict)
 import qualified Data.Vector as V (filter, null, empty)
 import qualified Data.Aeson as A
 
+dataProviders = ["spotify"]
+
 -- Models
 data Detail = T String | URLS [String] deriving Show
 data Item = I Detail Detail deriving Show
@@ -36,6 +38,8 @@ instance A.ToJSON Item where
          toJSON (I (T title) (URLS urls)) = A.object ["title" A..= title, "previewUrls" A..= urls]
 instance A.ToJSON ServiceData where
          toJSON (SD name items) = A.object ["service" A..= name, "items" A..= items]
+instance A.ToJSON Body where
+         toJSON (B body) = A.object ["results" A..= body]
 
 -- Serialisation
 concatStrings (sep, xs) =
@@ -47,13 +51,27 @@ createTitle (title, artists)
             | null artists = title
             | otherwise    = "Song Details Unknown"
 -- buildItem r = I (T $ createTitle (parseTitles r, parseArtists r)) (URLS $ parsePreviewUrls r)
-buildServiceData service r =
+-- buildServiceData :: String ->  -> ServiceData
+buildServiceData service d =
                  SD { name  = service
                     , items = [I (T "") (T "")]
                     }
-buildBody datax = B datax
--- bodyToString :: Body b, Data.ByteString bs => b -> bs
-bodyToString b = A.encode b
+getServiceData :: (String, String) -> ServiceData
+getServiceData (service, query) =
+               let opts = defaults & param "q"     .~ [query]
+                                   & param "type"  .~ ["track"]
+                                   & param "limit" .~ ["5"]
+               in do
+                  r       <- getWith opts "https://api.spotify.com/v1/search"
+                  results <- parseData r
+                  return $ buildServiceData service results
+                  
+search :: String -> [ServiceData]               
+search query = map getServiceData $ zip dataProviders [query]
+buildBody :: [ServiceData] -> Body
+buildBody datas = B datas
+-- bodyToJSON :: Body b, Data.ByteString bs => b -> bs
+bodyToJSON b = A.encode b
 -- bodyToString $ buildBody (buildServiceData "Spotify" r)
 
 -- Parsing
@@ -96,10 +114,10 @@ app = \env ->
                       & param "limit" .~ ["5"]
   in do
        cc <- findRequestCountryCode $ extractRequestHeaders env
-       r <- getWith opts "https://api.spotify.com/v1/search"
+       searchResults  <- search $ getQueryParamValue "q" env
        if V.null $ V.filter (== AT.String cc) (parseAvailableMarkets r) then
-         return $ set_body_bytestring (encodeUtf8 $ "results {}") (def { headers = [ ("Content-Type", "text/json") ] })
+         return $ set_body_bytestring (encodeUtf8 "results {}") (def { headers = [ ("Content-Type", "text/json") ] })
        else
-         return $ set_body_bytestring ("") (def { headers = [ ("Content-Type", "text/json") ] })
+         return $ set_body_bytestring (encodeUtf8 "") (def { headers = [ ("Content-Type", "text/json") ] })
 
 main = run app
