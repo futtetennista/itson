@@ -6,12 +6,12 @@ import Hack2.Contrib.Response (set_body_bytestring)
 import Hack2.Handler.SnapServer
 import Data.Default (def)
 -- http://www.serpentine.com/wreq/
-import Network.Wreq hiding (headers)
+import Network.Wreq as Wreq hiding (headers)
 import Network.HTTP.Types.URI (decodePathSegments)
 import Control.Lens
 import Data.Aeson.Lens
 import qualified Data.Aeson.Types as AT (Value(String))
-import qualified Data.Text as T (dropWhileEnd, append, empty, splitOn, unpack)
+import qualified Data.Text as T (dropWhileEnd, append, empty, splitOn, unpack, pack, intercalate)
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.ByteString.Char8 as C8 (pack, unpack, split)
 import Data.Monoid
@@ -20,54 +20,64 @@ import Data.ByteString.Builder
 import Data.ByteString.Lazy as BSL (toStrict)
 import qualified Data.Vector as V (filter, null, empty)
 import qualified Data.Aeson as A
+import Data.Char (toLower)
+import Data.String
 
-dataProviders = ["spotify"]
+data Service = Spotify deriving Show
+dataProviders = [Spotify]
 
 -- Models
-data Detail = T String | URLS [String] deriving Show
-data Item = I Detail Detail deriving Show
+data Urls  = U [(String, String)] deriving Show
+data Title = TT String deriving Show
+data Item = I Title Urls deriving Show
 data ServiceData = SD { name  :: String
                       , items :: [Item]
                       } deriving Show
 data Body = B [ServiceData] deriving Show
 
-instance A.ToJSON Detail where
-         toJSON (T title) = A.object ["title" A..= title]
-         toJSON (URLS xs) = A.object ["previewUrls" A..= xs]
 instance A.ToJSON Item where
-         toJSON (I (T title) (URLS urls)) = A.object ["title" A..= title, "previewUrls" A..= urls]
+         toJSON (I (TT title) (U [(k, v)])) = A.object ["title" A..= title, (T.pack k) A..= v]
 instance A.ToJSON ServiceData where
          toJSON (SD name items) = A.object ["service" A..= name, "items" A..= items]
 instance A.ToJSON Body where
          toJSON (B body) = A.object ["results" A..= body]
 
 -- Serialisation
-concatStrings (sep, xs) =
-              let s = (foldr (\e res -> "\"" ++ e ++ "\"" ++ sep ++ res) "" xs)
-              in take (length s - 1) s
-createTitle :: (String, [String]) -> String
-createTitle (title, artists)
-            | (not $ null artists) && (not $ null title) = title ++ " by " ++ concatStrings (",", artists)
-            | null artists = title
-            | otherwise    = "Song Details Unknown"
+intercalateM sep xs = T.intercalate sep . filter (/="") $ map (\ m -> case m of { Just v -> v; Nothing -> "" }) xs
+--createTitle :: IsString s => Maybe s -> [Maybe s] -> Title 
+createTitle (Just t) (a:as) = TT $ (T.unpack t) ++ " by " ++ (T.unpack $ intercalateM ", " (a:as))
+createTitle (Just t) []     = TT (T.unpack t)
+createTitle Nothing  _      = TT "Song Details Unknown"
+--createUrls :: IsString s => Maybe s -> Maybe s -> Urls
+createUrls (Just p) (Just f) = U [("preview", T.unpack p), ("full", T.unpack f)]
+createUrls Nothing  (Just f) = U [("full", T.unpack f)]
+createUrls _ _               = U []
+          
 -- buildItem r = I (T $ createTitle (parseTitles r, parseArtists r)) (URLS $ parsePreviewUrls r)
 -- buildServiceData :: String ->  -> ServiceData
-buildServiceData service d =
-                 SD { name  = service
-                    , items = [I (T "") (T "")]
+buildServiceData service datas =
+                 SD { name  = map toLower $ show service
+                    , items = datas
                     }
-getServiceData :: (String, String) -> ServiceData
+
+prepareSpotifyRequest query =
+                   (opts, "https://api.spotify.com/v1/search")
+                   where
+                        opts = defaults & param "q"     .~ [query]
+                                        & param "type"  .~ ["track"]
+                                        & param "limit" .~ ["5"]
+--getServiceData :: (Service, String) -> ServiceData
 getServiceData (service, query) =
-               let opts = defaults & param "q"     .~ [query]
-                                   & param "type"  .~ ["track"]
-                                   & param "limit" .~ ["5"]
+               let
+                  urlComponents = case service of
+                                       Spotify -> prepareSpotifyRequest query
                in do
-                  r       <- getWith opts "https://api.spotify.com/v1/search"
+                  r       <- getWith (fst urlComponents) (snd urlComponents)
                   results <- parseData r
                   return $ buildServiceData service results
                   
-search :: String -> [ServiceData]               
-search query = map getServiceData $ zip dataProviders [query]
+--search :: String -> [ServiceData]
+search query = return $ map getServiceData $ zip dataProviders [query]
 buildBody :: [ServiceData] -> Body
 buildBody datas = B datas
 -- bodyToJSON :: Body b, Data.ByteString bs => b -> bs
@@ -81,7 +91,7 @@ parseAvailableMarkets r =
                               [] -> V.empty
                               xs -> head mx
 
-parseData r = r ^.. responseBody . key "tracks" . key "items" . _Array . traverse . to (\o -> (o ^? key "name" . _String, o ^? key "preview_url" . _String, o ^? key "external_urls" .key "spotify" . _String, o ^.. key "artists" . _Array . traverse . to (\a -> a ^? key "name" . _String)))
+parseData r = return $ r ^.. responseBody . key "tracks" . key "items" . _Array . traverse . to (\o -> I (createTitle (o ^? key "name" . _String) (o ^.. key "artists" . _Array . traverse . to (\a -> a ^? key "name" . _String))) (createUrls (o ^? key "preview_url" . _String) (o ^? key "external_urls" . key "spotify" . _String)))
 
 -- Request
 getQueryParams (Env _ _ _ queryString _ _ _ _ _ _ _ _) =
@@ -109,15 +119,9 @@ findRequestCountryCode headers =
 
 app :: Application
 app = \env ->
-  let opts = defaults & param "q"     .~ [ getQueryParamValue "q" env ]
-                      & param "type"  .~ ["track"]
-                      & param "limit" .~ ["5"]
-  in do
-       cc <- findRequestCountryCode $ extractRequestHeaders env
-       searchResults  <- search $ getQueryParamValue "q" env
-       if V.null $ V.filter (== AT.String cc) (parseAvailableMarkets r) then
-         return $ set_body_bytestring (encodeUtf8 "results {}") (def { headers = [ ("Content-Type", "text/json") ] })
-       else
-         return $ set_body_bytestring (encodeUtf8 "") (def { headers = [ ("Content-Type", "text/json") ] })
+  do
+    --countryCode <- findRequestCountryCode $ extractRequestHeaders env
+    searchResults  <- search $ getQueryParamValue "q" env
+    return $ set_body_bytestring (encodeUtf8 "") (def { headers = [ ("Content-Type", "text/json") ] })
 
 main = run app
