@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- https://github.com/nfjinjing/hack2
-import Hack2
-import Hack2.Contrib.Response (set_body_bytestring)
+import qualified Hack2 as H2
+import qualified Hack2.Contrib.Response as H2R (set_body_bytestring)
 import Hack2.Handler.SnapServer
 import Data.Default (def)
 -- http://www.serpentine.com/wreq/
@@ -94,12 +94,11 @@ parseAvailableMarkets r =
 parseData r = return $ r ^.. responseBody . key "tracks" . key "items" . _Array . traverse . to (\o -> I (createTitle (o ^? key "name" . _String) (o ^.. key "artists" . _Array . traverse . to (\a -> a ^? key "name" . _String))) (createUrls (o ^? key "preview_url" . _String) (o ^? key "external_urls" . key "spotify" . _String)))
 
 -- Request
-getQueryParams (Env _ _ _ queryString _ _ _ _ _ _ _ _) =
-               let queryArray = map (T.splitOn "=") $ T.splitOn "&" (head $ decodePathSegments queryString)
+getQueryParams env =
+               let queryArray = map (T.splitOn "=") $ T.splitOn "&" (head $ decodePathSegments (H2.queryString env))
                in [ (a, b) | arr <- queryArray, a <- [head arr], b <- tail arr]
 getQueryParamValue p env = snd . head $ filter (\(a, b) -> a == p) (getQueryParams env)
 
-extractRequestHeaders (Env _ _ _ _ _ _ httpHeaders _ _ _ _ _) = httpHeaders
 printableRequestHeaders headers = foldr (\(k, v) hx -> mappend (mappend hx $ mappend (byteString k) (mappend (byteString "=") (byteString v))) (byteString "\n")) (byteString BS.empty) headers
 requestHeadersToBS headers = toStrict $ toLazyByteString (printableRequestHeaders headers)
 getRequestHeader headers hk =
@@ -117,11 +116,11 @@ findRequestCountryCode headers =
                          -- r <- get $ "http://www.telize.com/geoip/" ++ getIpFromRequest headers
                          return $ r ^. responseBody . key "country_code" . _String
 
-app :: Application
+app :: H2.Application
 app = \env ->
   do
-    --countryCode <- findRequestCountryCode $ extractRequestHeaders env
+    --countryCode <- findRequestCountryCode $ H2.httpHeaders env
     searchResults  <- search $ getQueryParamValue "q" env
-    return $ set_body_bytestring (encodeUtf8 "") (def { headers = [ ("Content-Type", "text/json") ] })
+    return $ H2R.set_body_bytestring (encodeUtf8 "") (def { H2.headers = [ ("Content-Type", "text/json") ] })
 
 main = run app
