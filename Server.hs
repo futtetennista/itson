@@ -26,16 +26,16 @@ import Data.Char (toLower)
 data Service = Spotify deriving Show
 dataProviders = [Spotify]
 
-data Urls  = U [(String, String)] deriving Show
-data Title = TT String deriving Show
+data Urls  = U [(T.Text, T.Text)] deriving Show
+data Title = TT T.Text deriving Show
 data Item = I Title Urls | Empty deriving Show
-data ServiceData = SD { name  :: String
+data ServiceData = SD { name  :: T.Text
                       , items :: [Item]
                       } deriving Show
 data Body = B [ServiceData] deriving Show
 
 instance A.ToJSON Item where
-         toJSON (I (TT title) (U kvs)) = A.object $ ("title" A..= title) : ["urls" A..= A.object (map (\(k, v) -> T.pack k A..= v) kvs)]
+         toJSON (I (TT title) (U kvs)) = A.object $ ("title" A..= title) : ["urls" A..= A.object (map (\(k, v) -> k A..= v) kvs)]
 instance A.ToJSON ServiceData where
          toJSON (SD name [])    = A.object ["service" A..= name, "items" A..= AT.emptyArray]
          toJSON (SD name items) = A.object ["service" A..= name, "items" A..= items]
@@ -45,12 +45,12 @@ instance A.ToJSON Body where
 -- Serialisation
 intercalateM sep xs = T.intercalate sep . filter (/="") $ map (\ m -> case m of { Just v -> v; Nothing -> "" }) xs
 --createTitle :: IsString s => Maybe s -> [Maybe s] -> Title 
-createTitle (Just t) (a:as) = TT $ (T.unpack t) ++ " by " ++ (T.unpack $ intercalateM ", " (a:as))
-createTitle (Just t) []     = TT (T.unpack t)
+createTitle (Just t) (a:as) = TT $ t `T.append` " by " `T.append` (intercalateM ", " (a:as))
+createTitle (Just t) []     = TT t
 createTitle Nothing  _      = TT "Song Details Unknown"
 --createUrls :: Data.String.IsString s => Maybe s -> Maybe s -> Urls
-createUrls (Just p) (Just f) = U [("preview", T.unpack p), ("full", T.unpack f)]
-createUrls Nothing  (Just f) = U [("full", T.unpack f)]
+createUrls (Just p) (Just f) = U [("preview", p), ("full", f)]
+createUrls Nothing  (Just f) = U [("full", f)]
 createUrls _ _               = U []
 
 createSpotifyRequest query =
@@ -93,7 +93,7 @@ findRequestCountryCode headers =
 
 buildServiceData :: Service -> [Item] -> ServiceData
 buildServiceData service datas =
-                 SD { name  = map toLower $ show service
+                 SD { name  = T.pack . map toLower $ show service
                     , items = datas
                     }
 
