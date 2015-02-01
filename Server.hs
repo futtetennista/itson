@@ -1,24 +1,21 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- https://github.com/nfjinjing/hack2
-import qualified Hack2 as H2
+import qualified Hack2 as H2 (Application(..), queryString, headers, httpHeaders)
 import qualified Hack2.Contrib.Response as H2R (set_body_bytestring)
-import Hack2.Handler.SnapServer
+import qualified Hack2.Handler.SnapServer as Server (run)
 import Data.Default (def)
 -- http://www.serpentine.com/wreq/
-import Network.Wreq as Wreq hiding (headers)
+import qualified Network.Wreq as Wreq (Response(..), responseBody, defaults, param, get, getWith)
 import Network.HTTP.Types.URI (decodePathSegments)
 import Control.Lens
 import Data.Aeson.Lens
 import qualified Data.Aeson.Types as AT (Value(String), emptyArray)
 import qualified Data.Text as T (Text(..), dropWhileEnd, append, empty, splitOn, unpack, pack, intercalate)
-import Data.Text.Encoding (encodeUtf8)
 import qualified Data.ByteString.Char8 as C8 (pack, unpack, split)
-import Data.Monoid
 import qualified Data.ByteString as BS (ByteString(..), empty, unpack)
-import qualified Data.ByteString.Builder as BSB
+--import qualified Data.ByteString.Builder as BSB
 import qualified Data.ByteString.Lazy as BSL (toStrict)
-import qualified Data.Vector as V (filter, null, empty)
 import qualified Data.Aeson as A
 import Data.Char (toLower)
 
@@ -56,12 +53,13 @@ createUrls False (Just p) _       = U [("preview", p)]
 createUrls False _ _              = U []
 
 -- Parsing
+parseAvailableMarkets :: (AsValue v) => v -> [T.Text]
 parseAvailableMarkets v = v ^. key "available_markets" . _Array . traverse . to (\ms -> ms ^.. _String)
+isPlayable :: (AsValue v) => T.Text -> v -> Bool
+isPlayable cc vs = not . null . filter (==cc) $ parseAvailableMarkets vs
 parseDataProviderResponse :: (AsValue body) => DataProvider -> T.Text -> Wreq.Response body -> [Item]
 parseDataProviderResponse service cc resp =
-          resp ^.. responseBody . key "tracks" . key "items" . _Array . traverse . to (\o -> let trackAvailable = not . null . filter (==cc) $ parseAvailableMarkets o
-        in
-          I (createTitle (o ^? key "name" . _String) (o ^.. key "artists" . _Array . traverse . to (\a -> a ^? key "name" . _String))) (createUrls trackAvailable (o ^? key "preview_url" . _String) (o ^? key "external_urls" . key "spotify" . _String)))
+          resp ^.. Wreq.responseBody . key "tracks" . key "items" . _Array . traverse . to (\o -> I (createTitle (o ^? key "name" . _String) (o ^.. key "artists" . _Array . traverse . to (\a -> a ^? key "name" . _String))) (createUrls (isPlayable cc o) (o ^? key "preview_url" . _String) (o ^? key "external_urls" . key "spotify" . _String)))
 
 -- Incoming Request
 getQueryParams env =
@@ -82,9 +80,9 @@ getIpFromRequest headers = C8.unpack $ head (C8.split ':' (getRequestHeaderValue
 findRequestCountryCode headers =
                        do
                          -- for testing purposes use a static ip
-                         r <- get $ "http://www.telize.com/geoip/2.240.222.127"
+                         r <- Wreq.get $ "http://www.telize.com/geoip/2.240.222.127"
                          -- r <- get $ "http://www.telize.com/geoip/" ++ getIpFromRequest headers
-                         return $ r ^. responseBody . key "country_code" . _String
+                         return $ r ^. Wreq.responseBody . key "country_code" . _String
 
 createFact :: DataProvider -> [Item] -> Fact
 createFact dataProvider xs = F { name  = T.pack . map toLower $ show dataProvider
@@ -102,9 +100,9 @@ bodyByteString res = BSL.toStrict $ resultsToJSON res
 createSpotifyRequest searchTerm =
                      (opts, "https://api.spotify.com/v1/search")
                      where
-                          opts = defaults & param "q"     .~ [searchTerm]
-                                          & param "type"  .~ ["track"]
-                                          & param "limit" .~ ["5"]
+                          opts = Wreq.defaults & Wreq.param "q"     .~ [searchTerm]
+                                               & Wreq.param "type"  .~ ["track"]
+                                               & Wreq.param "limit" .~ ["5"]
 
 app :: H2.Application
 app = \env ->
@@ -113,7 +111,7 @@ app = \env ->
     in do
         --putStrLn $ "Searching results for term: \"" ++ T.unpack q ++ "\""
         cc <- findRequestCountryCode $ H2.httpHeaders env
-        r <- getWith (fst urlComponents) (snd urlComponents)
+        r <- Wreq.getWith (fst urlComponents) (snd urlComponents)
         --putStrLn "got response from spotify. Parsing..."
         let results = parseDataProviderResponse Spotify cc r
         --putStrLn "parsing done...creating response"
@@ -123,7 +121,7 @@ app = \env ->
         --let searchResults = search $ getQueryParamValue "q" env
         return $ H2R.set_body_bytestring body (def { H2.headers = [ ("Content-Type", "text/json") ] })
 
-main = run app
+main = Server.run app
 
 {-|
 Spotify Tests:
