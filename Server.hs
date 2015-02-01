@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- https://github.com/nfjinjing/hack2
-import qualified Hack2 as H2 (Application(..), queryString, headers, httpHeaders)
+import qualified Hack2 as H2 (Application(..), Response(..), queryString, headers, httpHeaders)
 import qualified Hack2.Contrib.Response as H2R (set_body_bytestring)
 import qualified Hack2.Handler.SnapServer as Server (run)
 import Data.Default (def)
@@ -11,7 +11,7 @@ import Network.HTTP.Types.URI (decodePathSegments)
 import Control.Lens
 import Data.Aeson.Lens
 import qualified Data.Aeson.Types as AT (Value(String), emptyArray)
-import qualified Data.Text as T (Text(..), dropWhileEnd, append, empty, splitOn, unpack, pack, intercalate)
+import qualified Data.Text as T (Text(..), dropWhileEnd, append, empty, splitOn, unpack, pack, intercalate, null)
 import qualified Data.ByteString.Char8 as C8 (pack, unpack, split)
 import qualified Data.ByteString as BS (ByteString(..), empty, unpack)
 --import qualified Data.ByteString.Builder as BSB
@@ -65,7 +65,11 @@ parseDataProviderResponse service cc resp =
 getQueryParams env =
                let queryArray = map (T.splitOn "=") $ T.splitOn "&" (head $ decodePathSegments (H2.queryString env))
                in [ (a, b) | arr <- queryArray, a <- [head arr], b <- tail arr]
-getQueryParamValue p env = snd . head $ filter (\(a, b) -> a == p) (getQueryParams env)
+getQueryParamValue p env =
+                   let param = filter (\(a, b) -> a == p) (getQueryParams env)
+                   in case param of
+                     [] -> T.empty
+                     _  -> snd $ head param
 
 --printableRequestHeaders headers = foldr (\(k, v) hx -> mappend (mappend hx $ mappend (byteString k) (mappend (byteString "=") (byteString v))) (byteString "\n")) (byteString BS.empty) headers
 --requestHeadersToBS headers = BSL.toStrict $ toLazyByteString (printableRequestHeaders headers)
@@ -103,23 +107,27 @@ createSpotifyRequest searchTerm =
                           opts = Wreq.defaults & Wreq.param "q"     .~ [searchTerm]
                                                & Wreq.param "type"  .~ ["track"]
                                                & Wreq.param "limit" .~ ["5"]
+response :: BS.ByteString -> H2.Response
+response body = H2R.set_body_bytestring body (def { H2.headers = [("Content-Type", "text/json")] })
 
 app :: H2.Application
 app = \env ->
-    let q = getQueryParamValue "term" env
-        urlComponents = createSpotifyRequest q
-    in do
-        --putStrLn $ "Searching results for term: \"" ++ T.unpack q ++ "\""
-        cc <- findRequestCountryCode $ H2.httpHeaders env
-        r <- Wreq.getWith (fst urlComponents) (snd urlComponents)
-        --putStrLn "got response from spotify. Parsing..."
-        let results = parseDataProviderResponse Spotify cc r
-        --putStrLn "parsing done...creating response"
-        let searchResults = Res [createFact Spotify results]
-        let body = bodyByteString searchResults
-        --putStrLn $ C8.unpack body
-        --let searchResults = search $ getQueryParamValue "q" env
-        return $ H2R.set_body_bytestring body (def { H2.headers = [ ("Content-Type", "text/json") ] })
+  let searchTerm = getQueryParamValue "term" env
+  in if T.null searchTerm then
+    return $ response "{\"error\":{\"cause\":\"No search term supplied. Include a \'term\' query parameter\"}}"
+  else do
+    let urlComponents = createSpotifyRequest searchTerm
+    --putStrLn $ "Searching results for term: \"" ++ T.unpack q ++ "\""
+    cc <- findRequestCountryCode $ H2.httpHeaders env
+    r <- Wreq.getWith (fst urlComponents) (snd urlComponents)
+    --putStrLn "got response from spotify. Parsing..."
+    let results = parseDataProviderResponse Spotify cc r
+    --putStrLn "parsing done...creating response"
+    let searchResults = Res [createFact Spotify results]
+    let body = bodyByteString searchResults
+    --putStrLn $ C8.unpack body
+    --let searchResults = search $ getQueryParamValue "q" env
+    return $ response body
 
 main = Server.run app
 
