@@ -124,3 +124,10 @@ app = \env ->
         return $ H2R.set_body_bytestring body (def { H2.headers = [ ("Content-Type", "text/json") ] })
 
 main = run app
+
+{-|
+Spotify Tests:
+* /?term=Damballah -> the last result is not available in the test country
+* /?term=glück -> utf-8 encoding
+* /?term=glück123 -> empty results
+-}
