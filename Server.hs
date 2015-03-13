@@ -10,14 +10,15 @@ import qualified Network.Wreq as Wreq (Response(..), responseBody, defaults, par
 import Network.HTTP.Types.URI (decodePathSegments)
 import Control.Lens
 import Data.Aeson.Lens
-import qualified Data.Aeson.Types as AT (Value(String), emptyArray)
-import qualified Data.Text as T (Text(..), dropWhileEnd, append, empty, splitOn, unpack, pack, intercalate, null)
+import qualified Data.Aeson.Types as AT (emptyArray)
+import qualified Data.Text as T (Text(..), append, empty, splitOn, unpack, pack, intercalate, null)
 import qualified Data.ByteString.Char8 as C8 (pack, unpack, split)
-import qualified Data.ByteString as BS (ByteString(..), empty, unpack)
+import qualified Data.ByteString as BS (ByteString(..), empty)
 --import qualified Data.ByteString.Builder as BSB
 import qualified Data.ByteString.Lazy as BSL (toStrict)
 import qualified Data.Aeson as A
 import Data.Char (toLower)
+import Data.Maybe (fromMaybe)
 
 -- Models
 data DataProvider = Spotify deriving Show
@@ -25,7 +26,7 @@ dataProviders = [Spotify]
 
 data Urls  = U [(T.Text, T.Text)] deriving Show
 data Title = TT T.Text deriving Show
-data Item = I Title Urls | Empty deriving Show
+data Item = I Title Urls deriving Show
 data Fact = F { name  :: T.Text
               , items :: [Item]
               } deriving Show
@@ -40,7 +41,9 @@ instance A.ToJSON Result where
          toJSON (Res body) = A.object ["results" A..= body]
 
 -- Serialisation
-intercalateM sep xs = T.intercalate sep . filter (/="") $ map (\ m -> case m of { Just v -> v; Nothing -> "" }) xs
+intercalateM :: T.Text -> [Maybe T.Text] -> T.Text
+intercalateM sep xs = T.intercalate sep . filter (/="") . map (fromMaybe "") $ xs
+
 createTitle :: Maybe T.Text -> [Maybe T.Text] -> Title
 createTitle (Just t) (a:as) = TT $ t `T.append` " by " `T.append` (intercalateM ", " (a:as))
 createTitle (Just t) []     = TT t
@@ -50,7 +53,7 @@ createUrls :: Bool -> Maybe T.Text -> Maybe T.Text -> Urls
 createUrls True (Just p) (Just f) = U [("preview", p), ("full", f)]
 createUrls True Nothing  (Just f) = U [("full", f)]
 createUrls False (Just p) _       = U [("preview", p)]
-createUrls False _ _              = U []
+createUrls _ _ _                  = U []
 
 -- Parsing
 parseAvailableMarkets :: (AsValue v) => v -> [T.Text]
@@ -75,11 +78,11 @@ getQueryParamValue p env =
 --requestHeadersToBS headers = BSL.toStrict $ toLazyByteString (printableRequestHeaders headers)
 getRequestHeader headers hk =
                  let key = C8.pack hk
-                 in filter (\(k, v) -> k == key) headers
+                 in filter (\(k, _) -> k == key) headers
 getRequestHeaderValue headers hk =
                  case getRequestHeader headers hk of
                       []       -> BS.empty
-                      [(k, v)] -> v
+                      [(_, v)] -> v
 getIpFromRequest headers = C8.unpack $ head (C8.split ':' (getRequestHeaderValue headers "Host"))
 findRequestCountryCode headers =
                        do
@@ -133,7 +136,7 @@ main = Server.run app
 
 {-|
 Spotify Tests:
-* /?term=Damballah -> the last result is not available in the test country
+* /?term=Damballah -> the last result is not available in Germany
 * /?term=glück -> utf-8 encoding
 * /?term=glück123 -> empty results
 -}
