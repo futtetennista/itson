@@ -4,10 +4,10 @@ module Spotify where
 
 import qualified Data.Aeson as Json
 import Data.Aeson.TH
---import System.IO
---import qualified Data.ByteString.Lazy as L
-import Data.List (stripPrefix)
-
+import System.IO
+import qualified Data.ByteString.Lazy as L
+import Data.List (stripPrefix,dropWhileEnd)
+import Data.Char (toLower)
 
 data APIAlbumsResponse =
   APIAlbumsResponse { albums :: Items Album } deriving Show
@@ -18,13 +18,33 @@ data APIArtistsResponse =
 data APITracksResponse =
   APITracksResponse { tracks :: Items Track } deriving Show
 
+data Response = Artists { _items :: [Data'] }
+              | Albums { _items :: [Data'] }
+              | Tracks { _items :: [Data'] } deriving Show
+
 data Items type' =
   Items { items :: [type'] } deriving Show
 
-items' :: Items Album
-items' =
-  Items { items = [album] }
-
+data Data'
+  = Track' { name :: String
+          , album :: Album
+          , artists' :: [Artist]
+          , preview_url' :: String
+          , available_markets :: [String]
+          , external_urls :: ExternalUrls
+          }
+  | Artist' { _images :: Maybe [Image]
+           , _href :: String
+           , _name :: String
+           , _external_urls :: ExternalUrls
+           }
+  | Album' { available_markets :: [String]
+          , album_type' :: String
+          , images :: Maybe [Image]
+          , href :: String
+          , external_urls :: ExternalUrls
+          , name :: String
+          } deriving Show
 -- TODO: is there a better way to name common fields instead of prefixing?!
 data Track =
   Track { track__name :: String
@@ -55,12 +75,10 @@ data Image =
   Image { height :: Int
         , url :: String
         , width :: Int
-        }
-  deriving Show
+        } deriving Show
 
-data ExternalUrls =
-  ExternalUrls { spotify :: String }
-  deriving Show
+newtype ExternalUrls =
+  ExternalUrls { spotify :: String } deriving Show
 
 
 $(deriveJSON defaultOptions ''APITracksResponse)
@@ -83,9 +101,22 @@ $(deriveJSON defaultOptions{fieldLabelModifier=(\field -> case stripPrefix "arti
 $(deriveJSON defaultOptions ''Image)
 $(deriveJSON defaultOptions ''ExternalUrls)
 
-{-|
-album :: Album
-album =
+$(deriveJSON defaultOptions{ fieldLabelModifier=drop 1
+                           , constructorTagModifier=(map toLower) . dropWhileEnd (=='\'')
+                           , sumEncoding=ObjectWithSingleField
+                           } ''Response)
+$(deriveJSON defaultOptions{ fieldLabelModifier=drop 1
+                           , constructorTagModifier=(map toLower) . dropWhileEnd (=='\'')
+                           , sumEncoding=defaultTaggedObject{ tagFieldName="type" }
+                           } ''Data')
+
+
+items' :: Items Album
+items' =
+  Items { items = [album'] }
+
+album' :: Album
+album' =
   Album { album__available_markets = []
         , album_type = "album_type"
         , album__images = []
@@ -102,7 +133,7 @@ main =
       (\handle ->
         do
           contents <- L.hGetContents handle
-          let m = Json.decode contents :: Maybe APIAlbumsResponse
+          let m = Json.decode contents :: Maybe Response
           putStrLn $ show m
       )
 
@@ -122,4 +153,3 @@ main =
           let m = Json.decode contents :: Maybe APIArtistsResponse
           putStrLn $ show m
       )
--}
