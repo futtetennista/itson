@@ -49,7 +49,7 @@ $(deriveJSON defaultOptions ''ExternalUrls)
 $(deriveJSON defaultOptions{ constructorTagModifier=map toLower
                            , sumEncoding=ObjectWithSingleField
                            } ''Response)
-$(deriveJSON defaultOptions{ constructorTagModifier=(map toLower) . dropWhileEnd (=='\'')
+$(deriveJSON defaultOptions{ constructorTagModifier=map toLower
                            , sumEncoding=defaultTaggedObject{ tagFieldName="type" }
                            } ''Model)
 
