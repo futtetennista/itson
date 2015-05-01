@@ -1,3 +1,4 @@
+# Haskell
 *.o
 *.hi
 *.chi
@@ -14,3 +15,9 @@ cabal.sandbox.config
 *.hp
 dist/
 log/
+
+# Elm
+elm.js
+*.html
+packages/
+build-artifacts/
