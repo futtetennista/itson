@@ -20,30 +20,31 @@ data Response = Artists { items :: [Model] }
               deriving Show
 
 data Model
-  = Track { name :: String
-          , album :: Model
-          , artists :: [Model]
-          , preview_url :: String
+  = Track { name              :: String
+          , album             :: Model
+          , artists           :: [Model]
+          , preview_url       :: String
           , available_markets :: [String]
-          , external_urls :: ExternalUrls
+          , external_urls     :: ExternalUrls
           }
-  | Artist { images :: Maybe [Image]
-           , href :: String
-           , name :: String
+  | Artist { images        :: Maybe [Image]
+           , href          :: String
+           , name          :: String
            , external_urls :: ExternalUrls
            }
   | Album { available_markets :: [String]
-          , album_type :: String
-          , images :: Maybe [Image]
-          , href :: String
-          , external_urls :: ExternalUrls
-          , name :: String
-          } deriving Show
+          , album_type        :: String
+          , images            :: Maybe [Image]
+          , href              :: String
+          , external_urls     :: ExternalUrls
+          , name              :: String
+          }
+  deriving Show
 
 data Image =
   Image { height :: Int
-        , url :: String
-        , width :: Int
+        , url    :: String
+        , width  :: Int
         } deriving Show
 
 newtype ExternalUrls =
