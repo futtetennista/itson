@@ -11,12 +11,13 @@ import Data.Char (toLower)
 import qualified Network.HTTP.Client as HTTP
 import Network.HTTP.Client.TLS
 import Data.ByteString.Char8 (pack)
+import Models as ItsOn
 
-
+-- MODELS
 data Response = Artists { items :: [Model] }
               | Albums  { items :: [Model] }
               | Tracks  { items :: [Model] }
-              | Error   { message :: String } deriving Show
+              deriving Show
 
 data Model
   = Track { name :: String
@@ -48,7 +49,7 @@ data Image =
 newtype ExternalUrls =
   ExternalUrls { spotify :: String } deriving Show
 
-
+-- JSON
 $(deriveJSON defaultOptions ''Image)
 $(deriveJSON defaultOptions ''ExternalUrls)
 $(deriveJSON defaultOptions{ constructorTagModifier = map toLower
@@ -58,24 +59,63 @@ $(deriveJSON defaultOptions{ constructorTagModifier = map toLower
                            , sumEncoding = defaultTaggedObject{ tagFieldName = "type" }
                            } ''Model)
 
+-- IT'S ON MODELS
+emptyFragment :: Fragment
+emptyFragment =
+  Fragment { service       = "Spotify"
+           , ItsOn.items   = []
+           }
 
--- toSearchTrackRequest :: exceptions-0.8.0.2:Control.Monad.Catch.MonadThrow m =>
---                         [Char] -> m HTTP.Request
-toSearchTrackRequest term =
-  do initReq <- HTTP.parseUrl "https://api.spotify.com/v1/search"
-     let req = initReq { HTTP.queryString = pack $ "type=track&limit=5&q=" ++ term
-                       , HTTP.requestHeaders = [("Content-Type", "application/json")]
-                       }
-     return req
+toFragment :: CountryCode -> Response -> Fragment
+toFragment market response =
+  case response of
+    Tracks r ->
+      emptyFragment { ItsOn.items = map (toTrack market) (Spotify.items response) }
+    _        -> emptyFragment
 
-search :: String -> IO Response
-search term =
-  do request  <- toSearchTrackRequest term
-     response <- HTTP.withManager tlsManagerSettings $ HTTP.httpLbs request
+toTrack :: CountryCode -> Model -> Item
+toTrack market model =
+  ItsOn.Track { title = name model
+              , ItsOn.artists = map name (Spotify.artists model)
+              , ItsOn.album = name $ Spotify.album model
+              , urls = Urls { full = getFullUrl model market
+                            , preview = preview_url model
+                            }
+              }
+
+  where getFullUrl model market =
+          case isAvailable model market of
+            True  -> Just $ spotify (external_urls model)
+            False -> Nothing
+
+        isAvailable model market =
+          case filter (==market) (available_markets model) of
+            [] -> False
+            _  -> True
+
+-- HTTP
+search :: ItsOn.Request -> IO Fragment
+search request =
+  do req  <- toHTTPRequest request
+     response <- HTTP.withManager tlsManagerSettings $ HTTP.httpLbs req
      let result = Json.decode $ HTTP.responseBody response :: Maybe Response
      case result of
-       Just r  -> return r
-       Nothing -> return Error { message ="Boooom" }
+       Just r  -> return $ toFragment (countryCode request) r
+       Nothing -> return emptyFragment
+  where toHTTPRequest r =
+          do initReq <- HTTP.parseUrl "https://api.spotify.com/v1/search"
+             let req = initReq { HTTP.queryString = pack $ "type=" ++ (getType r)
+                                                    ++ "&limit=" ++ (show $ maxResults r)
+                                                    ++ "&q=" ++ (term r)
+                            , HTTP.requestHeaders = [("Content-Type", "application/json")]
+                            }
+             putStrLn $ show req
+             return req
+
+        getType request =
+          case type' request of
+            TTrack -> "track"
+            TAlbum -> "album"
 
 -- main :: IO ()
 -- main =
