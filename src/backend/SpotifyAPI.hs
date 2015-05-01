@@ -90,9 +90,7 @@ toTrack market model =
             False -> Nothing
 
         isAvailable model market =
-          case filter (==market) (available_markets model) of
-            [] -> False
-            _  -> True
+          market `elem` available_markets model
 
 -- HTTP
 search :: ItsOn.Request -> IO Fragment
