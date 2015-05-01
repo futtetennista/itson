@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
 
-module Spotify where
+module Spotify (search) where
 
 import qualified Data.Aeson as Json
 import Data.Aeson.TH
@@ -8,10 +8,15 @@ import System.IO
 import qualified Data.ByteString.Lazy as L
 import Data.List (stripPrefix,dropWhileEnd)
 import Data.Char (toLower)
+import qualified Network.HTTP.Client as HTTP
+import Network.HTTP.Client.TLS
+import Data.ByteString.Char8 (pack)
+
 
 data Response = Artists { items :: [Model] }
-              | Albums { items :: [Model] }
-              | Tracks { items :: [Model] } deriving Show
+              | Albums  { items :: [Model] }
+              | Tracks  { items :: [Model] }
+              | Error   { message :: String } deriving Show
 
 data Model
   = Track { name :: String
@@ -46,12 +51,31 @@ newtype ExternalUrls =
 
 $(deriveJSON defaultOptions ''Image)
 $(deriveJSON defaultOptions ''ExternalUrls)
-$(deriveJSON defaultOptions{ constructorTagModifier=map toLower
-                           , sumEncoding=ObjectWithSingleField
+$(deriveJSON defaultOptions{ constructorTagModifier = map toLower
+                           , sumEncoding = ObjectWithSingleField
                            } ''Response)
-$(deriveJSON defaultOptions{ constructorTagModifier=map toLower
-                           , sumEncoding=defaultTaggedObject{ tagFieldName="type" }
+$(deriveJSON defaultOptions{ constructorTagModifier = map toLower
+                           , sumEncoding = defaultTaggedObject{ tagFieldName = "type" }
                            } ''Model)
+
+
+-- toSearchTrackRequest :: exceptions-0.8.0.2:Control.Monad.Catch.MonadThrow m =>
+--                         [Char] -> m HTTP.Request
+toSearchTrackRequest term =
+  do initReq <- HTTP.parseUrl "https://api.spotify.com/v1/search"
+     let req = initReq { HTTP.queryString = pack $ "type=track&limit=5&q=" ++ term
+                       , HTTP.requestHeaders = [("Content-Type", "application/json")]
+                       }
+     return req
+
+search :: String -> IO Response
+search term =
+  do request  <- toSearchTrackRequest term
+     response <- HTTP.withManager tlsManagerSettings $ HTTP.httpLbs request
+     let result = Json.decode $ HTTP.responseBody response :: Maybe Response
+     case result of
+       Just r  -> return r
+       Nothing -> return Error { message ="Boooom" }
 
 -- main :: IO ()
 -- main =
