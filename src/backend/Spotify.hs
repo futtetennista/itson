@@ -4,9 +4,8 @@ module Spotify (search) where
 
 import qualified Data.Aeson as Json
 import Data.Aeson.TH
-import System.IO
-import qualified Data.ByteString.Lazy as L
-import Data.List (stripPrefix,dropWhileEnd)
+-- import System.IO
+-- import qualified Data.ByteString.Lazy as L
 import Data.Char (toLower)
 import Data.ByteString.Char8 (pack)
 import qualified Network.HTTP.Client as HTTP
@@ -56,7 +55,7 @@ $(deriveJSON defaultOptions ''Image)
 $(deriveJSON defaultOptions ''ExternalUrls)
 $(deriveJSON defaultOptions{ constructorTagModifier = map toLower
                            , sumEncoding = ObjectWithSingleField
-                           } ''Response)
+                           } ''Spotify.Response)
 $(deriveJSON defaultOptions{ constructorTagModifier = map toLower
                            , sumEncoding = defaultTaggedObject{ tagFieldName = "type" }
                            } ''Model)
@@ -68,7 +67,7 @@ emptyFragment =
            , ItsOn.items   = []
            }
 
-toFragment :: CountryCode -> Response -> Fragment
+toFragment :: CountryCode -> Spotify.Response -> Fragment
 toFragment market response =
   case response of
     Tracks r ->
@@ -98,7 +97,7 @@ search :: ItsOn.Request -> IO Fragment
 search request =
   do httpRequest <- toHTTPRequest request
      response <- HTTP.withManager tlsManagerSettings $ HTTP.httpLbs httpRequest
-     let result = Json.decode $ HTTP.responseBody response :: Maybe Response
+     let result = Json.decode $ HTTP.responseBody response :: Maybe Spotify.Response
      case result of
        Just r  -> return $ toFragment (countryCode request) r
        Nothing -> return emptyFragment
