@@ -21,6 +21,7 @@ executable ItsOn
   main-is:             Server.hs
 
   other-modules:       Spotify
+                     , Utils.Geo
 
   other-extensions:    OverloadedStrings
 
