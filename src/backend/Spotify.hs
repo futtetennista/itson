@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
 
-module SpotifyAPI (search) where
+module Spotify (search) where
 
 import qualified Data.Aeson as Json
 import Data.Aeson.TH
@@ -72,14 +72,14 @@ toFragment :: CountryCode -> Response -> Fragment
 toFragment market response =
   case response of
     Tracks r ->
-      emptyFragment { ItsOn.items = map (toTrack market) (SpotifyAPI.items response) }
+      emptyFragment { ItsOn.items = map (toTrack market) (Spotify.items response) }
     _        -> emptyFragment
 
 toTrack :: CountryCode -> Model -> Item
 toTrack market model =
   ItsOn.Track { title = name model
-              , ItsOn.artists = map name (SpotifyAPI.artists model)
-              , ItsOn.album = name $ SpotifyAPI.album model
+              , ItsOn.artists = map name (Spotify.artists model)
+              , ItsOn.album = name $ Spotify.album model
               , urls = Urls { full = getFullUrl model market
                             , preview = preview_url model
                             }

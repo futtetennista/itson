@@ -18,7 +18,7 @@ cabal-version:       >=1.10
 executable ItsOn
   main-is:             Server.hs
 
-  other-modules:       SpotifyAPI
+  other-modules:       Spotify
 
   other-extensions:    OverloadedStrings
 
