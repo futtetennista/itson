@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
 
-module Spotify (search) where
+module SpotifyAPI (search) where
 
 import qualified Data.Aeson as Json
 import Data.Aeson.TH
@@ -8,12 +8,13 @@ import System.IO
 import qualified Data.ByteString.Lazy as L
 import Data.List (stripPrefix,dropWhileEnd)
 import Data.Char (toLower)
-import qualified Network.HTTP.Client as HTTP
-import Network.HTTP.Client.TLS
 import Data.ByteString.Char8 (pack)
+import qualified Network.HTTP.Client as HTTP
+import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Models as ItsOn
 
--- MODELS
+
+-- SPOTIFY MODELS
 data Response = Artists { items :: [Model] }
               | Albums  { items :: [Model] }
               | Tracks  { items :: [Model] }
@@ -71,14 +72,14 @@ toFragment :: CountryCode -> Response -> Fragment
 toFragment market response =
   case response of
     Tracks r ->
-      emptyFragment { ItsOn.items = map (toTrack market) (Spotify.items response) }
+      emptyFragment { ItsOn.items = map (toTrack market) (SpotifyAPI.items response) }
     _        -> emptyFragment
 
 toTrack :: CountryCode -> Model -> Item
 toTrack market model =
   ItsOn.Track { title = name model
-              , ItsOn.artists = map name (Spotify.artists model)
-              , ItsOn.album = name $ Spotify.album model
+              , ItsOn.artists = map name (SpotifyAPI.artists model)
+              , ItsOn.album = name $ SpotifyAPI.album model
               , urls = Urls { full = getFullUrl model market
                             , preview = preview_url model
                             }
@@ -95,21 +96,22 @@ toTrack market model =
 -- HTTP
 search :: ItsOn.Request -> IO Fragment
 search request =
-  do req  <- toHTTPRequest request
-     response <- HTTP.withManager tlsManagerSettings $ HTTP.httpLbs req
+  do httpRequest <- toHTTPRequest request
+     response <- HTTP.withManager tlsManagerSettings $ HTTP.httpLbs httpRequest
      let result = Json.decode $ HTTP.responseBody response :: Maybe Response
      case result of
        Just r  -> return $ toFragment (countryCode request) r
        Nothing -> return emptyFragment
+
   where toHTTPRequest r =
           do initReq <- HTTP.parseUrl "https://api.spotify.com/v1/search"
-             let req = initReq { HTTP.queryString = pack $ "type=" ++ (getType r)
-                                                    ++ "&limit=" ++ (show $ maxResults r)
-                                                    ++ "&q=" ++ (term r)
-                            , HTTP.requestHeaders = [("Content-Type", "application/json")]
-                            }
-             putStrLn $ show req
-             return req
+             let req = initReq { HTTP.requestHeaders = headers }
+             return $ HTTP.setQueryString [ (pack "type", Just $ pack (getType r))
+                                          , (pack "limit", Just $ pack (show $ maxResults r))
+                                          , (pack "q", Just $ pack (term r))
+                                          ] req
+
+        headers = [ ("Content-Type", "application/json") ]
 
         getType request =
           case type' request of
