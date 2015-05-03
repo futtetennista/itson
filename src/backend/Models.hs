@@ -13,6 +13,17 @@ data Request =
           , countryCode :: CountryCode
           }
 
+defaultRequest :: Request
+defaultRequest =
+  Request { term        = ""
+          , type'       = TTrack
+          , maxResults  = 5
+          , countryCode = ""
+          }
+
+data Response = Results [Fragment]
+              | Error { message :: String }
+
 data Fragment =
   Fragment { service :: String
            , items   :: [Item]
@@ -47,3 +58,6 @@ $(deriveJSON defaultOptions{ constructorTagModifier = map toLower
                            , sumEncoding = defaultTaggedObject{ tagFieldName = "type" }
                            } ''Item)
 $(deriveJSON defaultOptions ''Fragment)
+$(deriveJSON defaultOptions{ constructorTagModifier = map toLower
+                           , sumEncoding = ObjectWithSingleField
+                           } ''Response)
