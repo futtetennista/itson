@@ -4,40 +4,48 @@ import Debug (..)
 import Text as T
 import Window as W
 import Signal as S
-import String ( isEmpty )
+import String (isEmpty, join)
 import Http
-import Json.Decode ( Decoder, customDecoder, decodeString
-                   , object2, maybe, (:=), string, map, list )
+import Json.Decode (Decoder, customDecoder, decodeString
+                   , object2, object4, maybe, (:=)
+                   , string , map, list)
 import Json.Encode as Encode
 import List
 import Keyboard
 import Html (..)
 import Html.Attributes as Attr
 import Html.Events (..)
-import Html.Lazy ( lazy )
+import Html.Lazy (lazy)
 import Time
 
 
 -- MODELS
-type Service = Spotify
-             | Unknown
+type alias Service = String
 
 type alias Urls = { full    : Maybe String
                   , preview : String
                   }
 
-type alias Item = { title : String
-                  , urls  : Urls
+type alias Item = { title   : String
+                  , album   : String
+                  , artists : List String
+                  , urls    : Urls
                   }
 
 type alias Fragment = { service  : Service
                       , items    : List Item
                       }
 
+emptyUrls : Urls
+emptyUrls = { full = Nothing
+            , preview = ""
+            }
 
-emtpyItem : Item
-emptyItem = { title = ""
-            , urls = []
+emptyItem : Item
+emptyItem = { title  = ""
+            , album  = ""
+            , artists = []
+            , urls   = emptyUrls
             }
 
 type alias Request =
@@ -49,7 +57,7 @@ type Update = Term String
             | Search
             | NoOp
 
-emptyRequest :: Request
+emptyRequest : Request
 emptyRequest = { searchTerm   = ""
                , sendAttempts = 0
                }
@@ -135,14 +143,18 @@ viewServiceLogo provider =
 viewItem : Service -> Item -> Html
 viewItem provider item =
     li [ Attr.class "item", styleItemList ]
-       [ h2 [ Attr.class "header2" ] [ text item.title ]
+       [ h2 [ Attr.class "header2" ] [ text (viewItemTitle item) ]
        , viewUrls provider item.urls
        ]
+
+viewItemTitle : Item -> String
+viewItemTitle item =
+    item.title ++ " by " ++ (join ", " item.artists)
 
 viewUrls : Service -> Urls -> Html
 viewUrls provider urls =
     case provider of
-      Spotify ->
+      "Spotify" ->
           div [ Attr.class "item-urls" ]
               [
                 case urls.full of
@@ -177,7 +189,7 @@ viewUrls provider urls =
 toLogo : Service -> FilePath
 toLogo dp =
     case dp of
-      Spotify -> "../../../assets/spotify.jpeg"
+      "Spotify" -> "../../assets/spotify.jpeg"
       _       -> "" -- TODO: provide default img
 
 
@@ -233,7 +245,8 @@ urls =
 
 item : Decoder Item
 item =
-    object2 Item ("title" := string) ("urls" := urls)
+    object4 Item ("title" := string) ("album" := string)
+                 ("artists" := (list string)) ("urls" := urls)
 
 fragment : Decoder Fragment
 fragment =
