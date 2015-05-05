@@ -19,27 +19,26 @@ data Response = Artists { items :: [Model] }
               | Tracks  { items :: [Model] }
               deriving Show
 
-data Model
-  = Track { name              :: String
-          , album             :: Model
-          , artists           :: [Model]
-          , preview_url       :: String
-          , available_markets :: [String]
-          , external_urls     :: ExternalUrls
-          }
-  | Artist { images        :: Maybe [Image]
-           , href          :: String
-           , name          :: String
-           , external_urls :: ExternalUrls
-           }
-  | Album { available_markets :: [String]
-          , album_type        :: String
-          , images            :: Maybe [Image]
-          , href              :: String
-          , external_urls     :: ExternalUrls
-          , name              :: String
-          }
-  deriving Show
+data Model = Track { name              :: String
+                   , album             :: Model
+                   , artists           :: [Model]
+                   , preview_url       :: String
+                   , available_markets :: [String]
+                   , external_urls     :: ExternalUrls
+                   }
+           | Artist { images        :: Maybe [Image]
+                    , href          :: String
+                    , name          :: String
+                    , external_urls :: ExternalUrls
+                    }
+           | Album { available_markets :: [String]
+                   , album_type        :: String
+                   , images            :: Maybe [Image]
+                   , href              :: String
+                   , external_urls     :: ExternalUrls
+                   , name              :: String
+                   }
+           deriving Show
 
 data Image =
   Image { height :: Int
@@ -72,6 +71,7 @@ toFragment market response =
   case response of
     Tracks r ->
       emptyFragment { ItsOn.items = map (toTrack market) (Spotify.items response) }
+
     _        -> emptyFragment
 
 toTrack :: CountryCode -> Model -> Item
