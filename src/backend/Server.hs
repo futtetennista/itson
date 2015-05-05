@@ -10,6 +10,7 @@ import qualified Data.Text as T (splitOn, unpack)
 import qualified Data.ByteString.Char8 as C8 (pack, unpack, split)
 import qualified Data.ByteString as BS (empty, null)
 import Data.ByteString (ByteString)
+import Data.Text.Internal (Text)
 import qualified Data.ByteString.Lazy as BSL (toStrict)
 import qualified Data.Aeson as Json
 import qualified Spotify
@@ -18,7 +19,7 @@ import Models
 
 
 -- Incoming Request
-getParams :: H2.Env -> [(Data.Text.Internal.Text, Data.Text.Internal.Text)]
+getParams :: H2.Env -> [(Text, Text)]
 getParams env =
   let query = H2.queryString env
   in if BS.null query
