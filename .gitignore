@@ -21,3 +21,5 @@ elm.js
 *.html
 packages/
 build-artifacts/
+
+*.properties

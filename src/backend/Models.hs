@@ -1,5 +1,4 @@
 {-# LANGUAGE TemplateHaskell #-}
-
 module Models where
 
 import Data.Aeson.TH
@@ -42,7 +41,7 @@ data Item = Track { title   :: String
 
 data Urls =
   Urls { full    :: Maybe String
-       , preview :: String
+       , preview :: Maybe String
        } deriving Show
 
 data Type = TAlbum

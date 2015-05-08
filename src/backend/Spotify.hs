@@ -69,19 +69,19 @@ emptyFragment =
 toFragment :: CountryCode -> Spotify.Response -> Fragment
 toFragment market response =
   case response of
-    Tracks r ->
+    Tracks _ ->
       emptyFragment { ItsOn.items = map (toTrack market) (Spotify.items response) }
 
     _        -> emptyFragment
 
 toTrack :: CountryCode -> Model -> Item
 toTrack market model =
-  ItsOn.Track { title = name model
+  ItsOn.Track { title         = name model
               , ItsOn.artists = map name (Spotify.artists model)
-              , ItsOn.album = name $ Spotify.album model
-              , urls = Urls { full = getFullUrl model market
-                            , preview = preview_url model
-                            }
+              , ItsOn.album   = name $ Spotify.album model
+              , urls          = Urls { full    = getFullUrl model market
+                                     , preview = Just $ preview_url model
+                                     }
               }
 
   where getFullUrl model market =
