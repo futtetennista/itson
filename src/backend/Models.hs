@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell, ExistentialQuantification #-}
 module Models where
 
 import Data.Aeson.TH
@@ -60,3 +60,12 @@ $(deriveJSON defaultOptions ''Fragment)
 $(deriveJSON defaultOptions{ constructorTagModifier = map toLower
                            , sumEncoding = ObjectWithSingleField
                            } ''Response)
+
+class Service a where
+  search :: a -> Request -> IO Fragment
+  empty  :: a -> Fragment
+
+data ServiceWrapper = forall s . Service s => MkServiceWrapper s
+
+wrap :: Service s => s -> ServiceWrapper
+wrap = MkServiceWrapper

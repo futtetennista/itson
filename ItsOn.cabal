@@ -22,7 +22,6 @@ executable ItsOn
 
   other-modules:       Spotify
                      , Soundcloud
-                     , Service
                      , Utils.Geo
 
   other-extensions:    OverloadedStrings

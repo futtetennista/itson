@@ -13,7 +13,6 @@ import Data.ByteString (ByteString)
 import Data.Text.Internal (Text)
 import qualified Data.ByteString.Lazy as BSL (toStrict)
 import qualified Data.Aeson as Json
-import Service
 import Spotify
 import Soundcloud
 import Models
@@ -42,8 +41,8 @@ getParamValue paramName env =
 --printableRequestHeaders headers = foldr (\(k, v) hx -> mappend (mappend hx $ mappend (byteString k) (mappend (byteString "=") (byteString v))) (byteString "\n")) (byteString BS.empty) headers
 --requestHeadersToBS headers = BSL.toStrict $ toLazyByteString (printableRequestHeaders headers)
 
-getIp :: [(ByteString, ByteString)] -> String
-getIp headers =
+getIP :: [(ByteString, ByteString)] -> String
+getIP headers =
   C8.unpack $ head (C8.split ':' (requestHeaderValue headers "Host"))
 
   where requestHeaderValue headers hk =
@@ -66,8 +65,8 @@ getResults request service =
          Right f -> return f
      return fragment
 
-  where search' request (MkServiceWrapper s) = search s request
-        empty' (MkServiceWrapper s) = empty s
+  where search' req (MkServiceWrapper s) = search s req
+        empty' (MkServiceWrapper s)      = empty s
 
 services :: [ServiceWrapper]
 services = [ wrap Spotify
@@ -82,7 +81,7 @@ app = \env ->
          return $ response . BSL.toStrict $ Json.encode (Error errorEmptySearchTerm)
 
        Just t  ->
-         do countryCode <- Geo.findCountryCode $ getIp (headers env)
+         do countryCode <- Geo.findCountryCode $ getIP (headers env)
             let request = defaultRequest{ term = T.unpack t
                                         , countryCode = countryCode
                                         }

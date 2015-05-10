@@ -10,7 +10,6 @@ import Data.ByteString.Char8 (pack)
 import qualified Network.HTTP.Client as HTTP
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Models as ItsOn
-import Service
 
 
 data Spotify = Spotify deriving Show

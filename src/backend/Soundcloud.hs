@@ -12,7 +12,6 @@ import qualified Data.Text as T (unpack, splitOn, lines)
 import Data.Text (Text)
 import Data.Text.IO (hGetContents)
 import System.IO (IOMode(ReadMode), withFile)
-import Service
 -- import qualified Data.ByteString.Lazy as L
 
 
