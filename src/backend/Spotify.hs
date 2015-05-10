@@ -13,7 +13,7 @@ import Models as ItsOn
 import Service
 
 
-data Spotify = Spotify
+data Spotify = Spotify deriving Show
 
 -- SPOTIFY MODELS
 data Response = Artists { items :: [Model] }

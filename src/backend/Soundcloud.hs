@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
-module Soundcloud where
+module Soundcloud (Soundcloud(..), search, empty) where
 
 import qualified Data.Aeson as Json
 import Data.Aeson.TH
@@ -12,8 +12,11 @@ import qualified Data.Text as T (unpack, splitOn, lines)
 import Data.Text (Text)
 import Data.Text.IO (hGetContents)
 import System.IO (IOMode(ReadMode), withFile)
+import Service
 -- import qualified Data.ByteString.Lazy as L
 
+
+data Soundcloud = Soundcloud deriving Show
 
 consumerKey :: IO (Either String String)
 consumerKey =
@@ -95,33 +98,34 @@ toTrack _ model =
                                    }
               }
 
--- HTTP
-search :: ItsOn.Request -> IO Fragment
-search request =
-  do key <- consumerKey
-     case key of
-       Left _ -> return emptyFragment
+instance Service Soundcloud where
+  empty Soundcloud = emptyFragment
 
-       Right k  ->
-         do httpRequest <- toHTTPRequest request k
-            response <- HTTP.withManager tlsManagerSettings $ HTTP.httpLbs httpRequest
-            let result = Json.decode $ HTTP.responseBody response :: Maybe Soundcloud.Response
-            case result of
-              Just r  -> return $ toFragment (countryCode request) r
-              Nothing -> return emptyFragment
+  search Soundcloud request =
+    do key <- consumerKey
+       case key of
+         Left _ -> return emptyFragment
 
-  where toHTTPRequest req key =
-          do initRequest <- HTTP.parseUrl "https://api.soundcloud.com/tracks.json"
-             let request = initRequest{ HTTP.requestHeaders = headers }
-             return $ HTTP.setQueryString [ (pack "type", packMaybe "tracks")
-                                          , (pack "limit", packMaybe (show $ maxResults req))
-                                          , (pack "q", packMaybe (term req))
-                                          , (pack "consumer_key", packMaybe key)
-                                          , (pack "order", packMaybe "created_at")
-                                          ] request
+         Right k  ->
+           do httpRequest <- toHTTPRequest request k
+              response <- HTTP.withManager tlsManagerSettings $ HTTP.httpLbs httpRequest
+              let result = Json.decode $ HTTP.responseBody response :: Maybe Soundcloud.Response
+              case result of
+               Just r  -> return $ toFragment (countryCode request) r
+               Nothing -> return emptyFragment
 
-          where headers   = [ ("Content-Type", "application/json") ]
-                packMaybe = Just . pack
+    where toHTTPRequest req key =
+            do initRequest <- HTTP.parseUrl "https://api.soundcloud.com/tracks.json"
+               let request = initRequest{ HTTP.requestHeaders = headers }
+               return $ HTTP.setQueryString [ (pack "type", packMaybe "tracks")
+                                            , (pack "limit", packMaybe (show $ maxResults req))
+                                            , (pack "q", packMaybe (term req))
+                                            , (pack "consumer_key", packMaybe key)
+                                            , (pack "order", packMaybe "created_at")
+                                            ] request
+
+            where headers   = [ ("Content-Type", "application/json") ]
+                  packMaybe = Just . pack
 
 
 -- main :: IO ()

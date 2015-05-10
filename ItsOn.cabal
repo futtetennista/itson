@@ -21,6 +21,7 @@ executable ItsOn
   main-is:             Server.hs
 
   other-modules:       Spotify
+                     , Soundcloud
                      , Service
                      , Utils.Geo
 

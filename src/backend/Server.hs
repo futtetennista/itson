@@ -13,7 +13,9 @@ import Data.ByteString (ByteString)
 import Data.Text.Internal (Text)
 import qualified Data.ByteString.Lazy as BSL (toStrict)
 import qualified Data.Aeson as Json
+import Service
 import Spotify
+import Soundcloud
 import Models
 import Control.Concurrent.Async (async, waitCatch)
 import qualified Utils.Geo as Geo
@@ -53,6 +55,24 @@ getIp headers =
           let key = C8.pack hk
           in filter (\(k, _) -> k == key) headers
 
+getResults :: Request -> ServiceWrapper -> IO Fragment
+getResults request service =
+  do searchAsync  <- async $ search' request service
+     putStrLn "triggering async request"
+     result       <- waitCatch searchAsync
+     fragment     <-
+       case result of
+         Left _  -> return $ empty' service
+         Right f -> return f
+     return fragment
+
+  where search' request (MkServiceWrapper s) = search s request
+        empty' (MkServiceWrapper s) = empty s
+
+services :: [ServiceWrapper]
+services = [ wrap Spotify
+           , wrap Soundcloud
+           ]
 
 app :: H2.Application
 app = \env ->
@@ -62,18 +82,12 @@ app = \env ->
          return $ response . BSL.toStrict $ Json.encode (Error errorEmptySearchTerm)
 
        Just t  ->
-         do countryCode     <- Geo.findCountryCode $ getIp (headers env)
+         do countryCode <- Geo.findCountryCode $ getIp (headers env)
             let request = defaultRequest{ term = T.unpack t
                                         , countryCode = countryCode
                                         }
-            spotifySearch   <- async $ search Spotify request
-            spotifyResult   <- waitCatch spotifySearch
-            spotifyFragment <-
-              case spotifyResult of
-                Left _  -> return $ empty Spotify
-                Right f -> return f
-            return $ response . BSL.toStrict $ Json.encode (Results [ spotifyFragment
-                                                                    ])
+            results <- sequence . map (getResults request) $ services
+            return $ response . BSL.toStrict $ Json.encode (Results results)
 
   where
     headers env = H2.httpHeaders env
