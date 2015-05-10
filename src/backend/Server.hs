@@ -13,9 +13,10 @@ import Data.ByteString (ByteString)
 import Data.Text.Internal (Text)
 import qualified Data.ByteString.Lazy as BSL (toStrict)
 import qualified Data.Aeson as Json
-import qualified Spotify
-import qualified Utils.Geo as Geo
+import Spotify
 import Models
+import Control.Concurrent.Async (async, waitCatch)
+import qualified Utils.Geo as Geo
 
 
 -- Incoming Request
@@ -61,11 +62,18 @@ app = \env ->
          return $ response . BSL.toStrict $ Json.encode (Error errorEmptySearchTerm)
 
        Just t  ->
-         do countryCode <- Geo.findCountryCode $ getIp (headers env)
-            fragment    <- Spotify.search defaultRequest{ term = T.unpack t
-                                                        , countryCode = countryCode
-                                                        }
-            return $ response . BSL.toStrict $ Json.encode (Results [ fragment ])
+         do countryCode     <- Geo.findCountryCode $ getIp (headers env)
+            let request = defaultRequest{ term = T.unpack t
+                                        , countryCode = countryCode
+                                        }
+            spotifySearch   <- async $ search Spotify request
+            spotifyResult   <- waitCatch spotifySearch
+            spotifyFragment <-
+              case spotifyResult of
+                Left _  -> return $ empty Spotify
+                Right f -> return f
+            return $ response . BSL.toStrict $ Json.encode (Results [ spotifyFragment
+                                                                    ])
 
   where
     headers env = H2.httpHeaders env
