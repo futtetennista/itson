@@ -57,7 +57,6 @@ getIP headers =
 getResults :: Request -> ServiceWrapper -> IO Fragment
 getResults request service =
   do searchAsync  <- async $ search' request service
-     putStrLn "triggering async request"
      result       <- waitCatch searchAsync
      fragment     <-
        case result of

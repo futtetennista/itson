@@ -109,7 +109,7 @@ instance Service Spotify where
             do initReq <- HTTP.parseUrl "https://api.spotify.com/v1/search"
                let req = initReq { HTTP.requestHeaders = headers }
                return $ HTTP.setQueryString [ (pack "type", Just $ pack (getType r))
-                                            , (pack "limit", Just $ pack (show $ maxResults r))
+                                            , (pack "limit", Just $ pack (show $ numResults r))
                                             , (pack "q", Just $ pack (term r))
                                             ] req
 

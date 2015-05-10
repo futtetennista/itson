@@ -13,6 +13,7 @@ import Data.Text (Text)
 import Data.Text.IO (hGetContents)
 import System.IO (IOMode(ReadMode), withFile)
 -- import qualified Data.ByteString.Lazy as L
+-- import Control.Concurrent.Async (async, waitCatch)
 
 
 data Soundcloud = Soundcloud deriving Show
@@ -117,7 +118,7 @@ instance Service Soundcloud where
             do initRequest <- HTTP.parseUrl "https://api.soundcloud.com/tracks.json"
                let request = initRequest{ HTTP.requestHeaders = headers }
                return $ HTTP.setQueryString [ (pack "type", packMaybe "tracks")
-                                            , (pack "limit", packMaybe (show $ maxResults req))
+                                            , (pack "limit", packMaybe (show $ numResults req))
                                             , (pack "q", packMaybe (term req))
                                             , (pack "consumer_key", packMaybe key)
                                             , (pack "order", packMaybe "created_at")
@@ -130,11 +131,16 @@ instance Service Soundcloud where
 -- main :: IO ()
 -- main =
 --   do
+--     searchAsync <- async $ search Soundcloud defaultRequest{ term = "123" }
+--     fragment <- waitCatch searchAsync
+--     res <- case fragment of
+--              Left _   -> return $ show "Kaputt"
+--              Right f  -> return $ show f
+--     print res
 --     putStrLn "Parse tracks test:"
---     withFile "test_data/soundcloud_api_sample_track_response.json" ReadMode
---       (\handle ->
---         do
---           contents <- L.hGetContents handle
---           let m = Json.decode contents :: Maybe Soundcloud.Response
---           putStrLn $ show m
---       )
+     -- withFile "test_data/soundcloud_api_sample_track_response.json" ReadMode
+     -- (\handle ->
+     --   do
+     --     contents <- L.hGetContents handle
+     --     let m = Json.decode contents :: Maybe Soundcloud.Response
+     --     putStrLn $ show m)

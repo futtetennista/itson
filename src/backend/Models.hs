@@ -8,7 +8,7 @@ import Data.Char (toLower)
 data Request =
   Request { term        :: String
           , type'       :: Type
-          , maxResults  :: Int
+          , numResults  :: Int
           , countryCode :: CountryCode
           }
 
@@ -16,12 +16,13 @@ defaultRequest :: Request
 defaultRequest =
   Request { term        = ""
           , type'       = TTrack
-          , maxResults  = 5
+          , numResults  = 5
           , countryCode = ""
           }
 
 data Response = Results [Fragment]
               | Error { message :: String }
+              deriving Show
 
 data Fragment =
   Fragment { service :: String
