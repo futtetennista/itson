@@ -3,7 +3,7 @@ HOST: http://itson.apiblueprint.com/
 
 # It's On
 
-"It's On" is a simple API allowing consumers to search for music on dixfferent online platforms.
+"It's On" is a simple API allowing consumers to search for music on different online platforms.
 For now only Spotify and Soundcloud are supported.
 
 # Search [/search?term={track_name}]
@@ -15,22 +15,38 @@ For now only Spotify and Soundcloud are supported.
 + Response 200 (application/json)
 
         {
-            "results" : [
-                { "service" : "Spotify"
-                , "items" : [ 
+            "results": [
+                {
+                    "service": "Spotify",
+                    "items": [
+                        {
+                            "urls": {
+                                "preview": "https://p.scdn.co/mp3-preview/5e0283c4d837b2c0422dffaabc768c13151a8ce3",
+                                "full": "https://open.spotify.com/track/69F5yQfUocXSOkIDBI8qVv"
+                            },
+                            "album": "Mue",
+                            "artists": [
+                                "Emilie Simon"
+                            ],
+                            "title": "The Eye Of The Moon",
+                            "type": "track"
+                        }
+                    ]
+                },
+                
+                {
+                    "service": "Soundcloud",
+                    "items": [
                     {
-                        "urls" : { "full": "https://..."
-                                 , "preview" : "https://..."
-                                 }
-                        , "artists" : [ "Miles Davis"
-                                      , "Russian Circles" 
-                                      ]
-                        , "title" : "Imaginary Song"
-                        , "album" : "Imaginary Album"
-                        , "type" : "track"
-                    }
-                  ]
+                        "urls": {
+                            "full": "https://api.soundcloud.com/tracks/205002523"
+                        },
+                        "artists": [
+                            "The O'C Alchemy"
+                        ],
+                        "title": "Diamonds in the Rough",
+                        "type": "track"
+                    }]
                 }
             ]
         }
-
