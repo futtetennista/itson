@@ -1,0 +1,36 @@
+FORMAT: 1A
+HOST: http://itson.apiblueprint.com/
+
+# It's On
+
+"It's On" is a simple API allowing consumers to search for music on dixfferent online platforms.
+For now only Spotify and Soundcloud are supported.
+
+# Search [/search?term={track_name}]
+
+## Search for a track [GET]
++ Paramenters
+    + track_name (required, string, `Moon Eye`) - Track name as a string
+
++ Response 200 (application/json)
+
+        {
+            "results" : [
+                { "service" : "Spotify"
+                , "items" : [ 
+                    {
+                        "urls" : { "full": "https://..."
+                                 , "preview" : "https://..."
+                                 }
+                        , "artists" : [ "Miles Davis"
+                                      , "Russian Circles" 
+                                      ]
+                        , "title" : "Imaginary Song"
+                        , "album" : "Imaginary Album"
+                        , "type" : "track"
+                    }
+                  ]
+                }
+            ]
+        }
+
