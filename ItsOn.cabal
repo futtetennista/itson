@@ -18,7 +18,7 @@ cabal-version:       >=1.10
 executable ItsOn
   ghc-options:         -W
 
-  main-is:             Server.hs
+  main-is:             Main.hs
 
   other-modules:       Spotify
                      , Soundcloud
