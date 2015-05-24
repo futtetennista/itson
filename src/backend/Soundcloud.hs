@@ -8,55 +8,12 @@ import Data.Char (toLower)
 import Data.ByteString.Char8 (pack)
 import qualified Network.HTTP.Client as HTTP
 import Network.HTTP.Client.TLS (tlsManagerSettings)
-import qualified Data.Text as T (unpack, splitOn, lines)
-import Data.Text (Text)
-import Data.Text.IO (hGetContents)
-import System.IO (IOMode(ReadMode), withFile)
+import qualified Utils.Properties as Properties
 -- import qualified Data.ByteString.Lazy as L
 -- import Control.Concurrent.Async (async, waitCatch)
 
 
 data Soundcloud = Soundcloud deriving Show
-
-consumerKey :: IO (Either String String)
-consumerKey =
-  do withFile "config.properties" ReadMode
-       (\handle ->
-         do contents <- hGetContents handle
-            case getConsumerKey contents of
-              [key] -> return $ Right (T.unpack key)
-              (_:_) -> return $ Left "Multiple values for Soundcloud consumer key"
-              _     ->
-                return $ Left "Soundcloud consumer key not found. \
-\ Possible issues are: \n\
-\ 1) config.properties file is missing \n\
-\ 2) the configuration file doesn't have a soundcloud.consumer_key entry \n")
-
-getConsumerKey :: Text -> [Text]
-getConsumerKey properties =
-  value . filterConsumerKey . toPair . toArray $ properties
-
-  where value kvs =
-          case kvs of
-            (Just (_, v)):xs -> [v] ++ value xs
-            _                -> []
-
-        filterConsumerKey xs =
-          filter (\x ->
-                   case x of
-                     Nothing     -> False
-                     Just (k, _) ->
-                       if (k == "soundcloud.consumer_key")
-                       then True
-                       else False) xs
-        toPair arr =
-          map (\xs ->
-                case xs of
-                  [k, v] -> Just (k, v)
-                  _      -> Nothing) arr
-
-        toArray properties =
-          map (T.splitOn "=") (T.lines properties)
 
 -- SOUNDCLOUD MODELS
 data Response = Tracks [Model] deriving Show
@@ -102,7 +59,7 @@ instance Service Soundcloud where
   empty Soundcloud = emptyFragment
 
   search Soundcloud request =
-    do key <- consumerKey
+    do key <- Properties.getProperty "soundcloud.consumer_key"
        case key of
          Left _ -> return emptyFragment
 

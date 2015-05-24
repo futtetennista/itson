@@ -23,6 +23,7 @@ executable ItsOn
   other-modules:       Spotify
                      , Soundcloud
                      , Utils.Geo
+                     , Utils.Properties
 
   other-extensions:    OverloadedStrings
 
