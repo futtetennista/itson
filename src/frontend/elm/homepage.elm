@@ -1,21 +1,24 @@
 module Homepage where
 
-import Debug (..)
+import Debug exposing (..)
 import Text as T
 import Window as W
-import Signal as S
-import String (isEmpty, join)
-import Http
-import Json.Decode (Decoder, customDecoder, decodeString
-                   , object2, object4, maybe, (:=)
-                   , string , map, list)
+import Signal
+import Signal exposing (Mailbox)
+import String exposing (isEmpty, join)
+import Http exposing (..)
+import Task exposing (Task, andThen)
+import Json.Decode as Decode exposing (customDecoder, decodeString
+                                      , object2, object4, maybe
+                                      , string , map, list)
+import Json.Decode as Decode exposing (Decoder, (:=))
 import Json.Encode as Encode
 import List
 import Keyboard
-import Html (..)
+import Html exposing (..)
 import Html.Attributes as Attr
-import Html.Events (..)
-import Html.Lazy (lazy)
+import Html.Events exposing (..)
+import Html.Lazy exposing (lazy)
 import Time
 
 
@@ -23,7 +26,7 @@ import Time
 type alias Service = String
 
 type alias Urls = { full    : Maybe String
-                  , preview : String
+                  , preview : Maybe String
                   }
 
 type alias Item = { title   : String
@@ -38,7 +41,7 @@ type alias Fragment = { service  : Service
 
 emptyUrls : Urls
 emptyUrls = { full = Nothing
-            , preview = ""
+            , preview = Nothing
             }
 
 emptyItem : Item
@@ -85,11 +88,11 @@ styleItemList =
 
 
 -- VIEWS
-view : (Int, Int) -> Request -> Maybe (List Fragment) -> Html
-view (h, w) model resM =
-    let results = case resM of
-                    Nothing  -> div [ Attr.class "empty-space" ] []
-                    Just res -> div [ Attr.class "results" ] (List.map3 viewFragment [(h, w) ] [ model.searchTerm ] res)
+view : (Int, Int) -> Request -> List Fragment -> Html
+view (h, w) model res =
+    let results = case res of
+                    [] -> div [ Attr.class "empty-space" ] []
+                    _  -> div [ Attr.class "results" ] (List.map3 viewFragment [ (h, w) ] [ model.searchTerm ] res)
     in div [ Attr.class "content"
            , styleContent
            ]
@@ -109,12 +112,12 @@ inputView (h, w) =
                      , Attr.type' "text"
                      , Attr.placeholder "Enter track name…"
                      , Attr.autofocus True
-                     , on "keyup" (customDecoder keyCode is13) (always <| S.send updateCh Search)
-                     --, onKeyUp (\ code -> if log "key code - " code == 13 then send updateCh <| Search else send updateCh <| NoOp)
-                     , on "input" targetValue (S.send updateCh << Term)
+                     , on "keyup" (customDecoder keyCode is13) (always <| Signal.message updateMailbox.address Search)
+                     --, onKeyUp (\ code -> if log "key code - " code == 13 then send updateMailbox <| Search else send updateMailbox <| NoOp)
+                     , on "input" targetValue (Signal.message updateMailbox.address << Term)
                      ] []
              , button [ Attr.style [ ("margin-top", "8px") ]
-                      , onClick (S.send updateCh Search)
+                      , onClick updateMailbox.address Search
                       ] [ text "Search" ]
              ]
 
@@ -159,18 +162,18 @@ viewUrls provider urls =
               [
                 case urls.full of
                   Nothing  ->
-                      if (not << isEmpty) urls.preview
-                      then div []
-                               [ div [ Attr.class "item-url-preview" ]
-                                     [ audio [ Attr.class "audio-preview"
-                                             , Attr.src urls.preview
-                                             , Attr.autoplay False
-                                             , Attr.controls True
-                                             ] []
-                                     ]
-                                , h6 [] [ text "(Preview only)" ]
-                               ]
-                      else div [] []
+                      case urls.preview of
+                        Nothing -> div [] []
+                        Just p  ->
+                            div [] [ div [ Attr.class "item-url-preview" ]
+                                             [ audio [ Attr.class "audio-preview"
+                                                     , Attr.src p
+                                                     , Attr.autoplay False
+                                                     , Attr.controls True
+                                                     ] []
+                                             ]
+                                   , h6 [] [ text "(Not available in your country. You can just listen to a preview)" ]
+                                   ]
                   -- https://developer.spotify.com/technologies/widgets/spotify-play-button/
                   Just url -> div [ Attr.class "item-url-full" ]
                                   [ iframe [ Attr.class "audio-full"
@@ -183,74 +186,69 @@ viewUrls provider urls =
                                   ]
               ]
 
-      _       -> div [] []
+      "Soundcloud" -> div [] [] --TODO
+      _ -> div [] []
 
 
 toLogo : Service -> FilePath
 toLogo dp =
     case dp of
-      "Spotify" -> "../../assets/spotify.jpeg"
+      "Spotify" -> "../../../assets/spotify.jpeg"
       _       -> "" -- TODO: provide default img
 
 
 -- UPDATE
-updateCh : S.Channel Update
-updateCh = S.channel NoOp
+updateMailbox : Mailbox Update
+updateMailbox =
+    Signal.mailbox NoOp
 
 model : Signal Request
-model = S.subscribe updateCh |> S.foldp update emptyRequest
+model =
+    updateMailbox.signal |> Signal.foldp update emptyRequest
 
-results : Signal (Maybe (List Fragment))
+results : Mailbox (List Fragment)
 results =
-    S.map2 toUrl (S.subscribe updateCh) model
-    --toUrl <~ (subscribe updateCh) ~ model
-        --|> sampleOn (Time.every Time.second)
-        |> S.keepIf (not << isEmpty) ""
-        |> S.dropRepeats
-        |> S.map toHttpRequest
-        |> Http.send
-        |> S.map toResults
-        |> S.map (log "toResults")
+    Signal.mailbox []
 
+port runner : Signal (Task Http.Error ())
+port runner =
+    Signal.map2 toUrl updateMailbox.signal model
+        |> Signal.filter (not << isEmpty) ""
+        |> Signal.dropRepeats
+        |> Signal.map (\url -> Http.get resultsList url)
+        |> Signal.map (\task -> task `andThen` Signal.send results.address)
 
 -- HTTP
-toHttpRequest : String -> Http.Request String
-toHttpRequest url = Http.get url
-
 toUrl : Update -> Request -> String
-toUrl u m =
-    let url = "http://localhost:3000/?term=" ++ m.searchTerm
-    in case u of
-      Search -> log "Search: " url
-      _      -> ""
+toUrl action m =
+    let url = Http.url "http://localhost:3000" [ ("term", m.searchTerm) ]
+    in case action of
+         Search -> url
+         _      -> ""
 
-toResults : Http.Response String -> Maybe (List Fragment)
-toResults response =
-    case decodeResponse resultsList response of
-      Ok v -> Just v
-      _    -> Nothing
-
+handleError : Http.Error -> Result String (List Fragment)
+handleError err =
+    case err of
+      BadResponse code msg  ->
+          Err ("Error: " ++ (toString code) ++ " " ++ msg)
+      UnexpectedPayload str ->
+          Err "Json decoding failed"
+      _                     ->
+          Err "Couldn't get results at this time. Please retry later."
 
 -- JSON
-decodeResponse : Decoder (List Fragment) -> Http.Response String -> Result String (List Fragment)
-decodeResponse decoder response =
-    case response of
-      Http.Failure code msg -> Err <| "Something went wrong (code: " ++ toString code ++ ", message: " ++ msg ++ ")"
-      Http.Success json     -> log "decodedResponse" <| decodeString resultsList json
-      _                     -> Err "Something's wrong and I don't know what exactly"
-
 urls : Decoder Urls
 urls =
-     object2 Urls (maybe ("full" := string)) ("preview" := string)
+     object2 Urls (maybe ("full" := Decode.string)) (maybe ("preview" := Decode.string))
 
 item : Decoder Item
 item =
-    object4 Item ("title" := string) ("album" := string)
-                 ("artists" := (list string)) ("urls" := urls)
+    object4 Item ("title" := Decode.string) ("album" := Decode.string)
+                 ("artists" := (list Decode.string)) ("urls" := urls)
 
 fragment : Decoder Fragment
 fragment =
-    object2 Fragment ("service" := string) ("items" := list item)
+    object2 Fragment ("service" := Decode.string) ("items" := list item)
 
 resultsList : Decoder (List Fragment)
 resultsList =
@@ -259,4 +257,4 @@ resultsList =
 
 main : Signal Html
 main =
-    S.map3 view W.dimensions model results
+    Signal.map3 view W.dimensions model results.signal
