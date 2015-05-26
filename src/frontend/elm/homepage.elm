@@ -89,15 +89,15 @@ styleItemList =
 
 -- VIEWS
 view : (Int, Int) -> Request -> List Fragment -> Html
-view (h, w) model res =
-    let results = case res of
-                    [] -> div [ Attr.class "empty-space" ] []
-                    _  -> div [ Attr.class "results" ] (List.map3 viewFragment [ (h, w) ] [ model.searchTerm ] res)
+view (h, w) model fragments =
+    let resultsView = case ofragments of
+                        [] -> div [ Attr.class "empty-space" ] []
+                        _  -> div [ Attr.class "results" ] (List.map3 viewFragment [ (h, w), (h, w) ] [ model.searchTerm, model.searchTerm ] fragments)
     in div [ Attr.class "content"
            , styleContent
            ]
            [ inputView (h, w)
-           , results
+           , resultsView
            ]
 
 -- keycode "enter"
@@ -106,7 +106,7 @@ is13 code = if code == 13 then Ok () else Err "keycode is not enter"
 
 inputView : (Int, Int) -> Html
 inputView (h, w) =
-    let inputWidth = log "resize" (toFloat w) / 3
+    let inputWidth = (toFloat w) / 3
     in
       div [] [ input [ Attr.style [ ("width", "100%") ]
                      , Attr.type' "text"
@@ -125,7 +125,7 @@ viewFragment : (Int, Int) -> String -> Fragment -> Html
 viewFragment (h, w) searchTerm f =
     let itemList =
             if List.isEmpty f.items
-            then [ h2 [ Attr.class "header2" ] [ text ("No results for: \'" ++ searchTerm ++ "\'") ] ]
+            then [ h2 [ Attr.class "header2" ] [ text <| noResults f.service searchTerm ] ]
             else [ viewList f ]
     in div [ Attr.class "fact" ] <| viewServiceLogo f.service :: itemList
 
@@ -147,7 +147,7 @@ viewItem : Service -> Item -> Html
 viewItem provider item =
     li [ Attr.class "item", styleItemList ]
        [ h2 [ Attr.class "header2" ] [ text (viewItemTitle item) ]
-       , viewUrls provider item.urls
+       , viewUrls (log "provider" provider) item.urls
        ]
 
 viewItemTitle : Item -> String
@@ -158,36 +158,63 @@ viewUrls : Service -> Urls -> Html
 viewUrls provider urls =
     case provider of
       "Spotify" ->
-          div [ Attr.class "item-urls" ]
-              [
-                case urls.full of
-                  Nothing  ->
-                      case urls.preview of
-                        Nothing -> div [] []
-                        Just p  ->
-                            div [] [ div [ Attr.class "item-url-preview" ]
-                                             [ audio [ Attr.class "audio-preview"
-                                                     , Attr.src p
-                                                     , Attr.autoplay False
-                                                     , Attr.controls True
-                                                     ] []
-                                             ]
-                                   , h6 [] [ text "(Not available in your country. You can just listen to a preview)" ]
-                                   ]
-                  -- https://developer.spotify.com/technologies/widgets/spotify-play-button/
-                  Just url -> div [ Attr.class "item-url-full" ]
-                                  [ iframe [ Attr.class "audio-full"
-                                           , Attr.src <| "https://embed.spotify.com/?uri=" ++ url
-                                           , Attr.width 300
-                                           , Attr.height 80
-                                           , Attr.property "allowtransparency" (Encode.string "true")
-                                           , Attr.property "framborder" (Encode.string "0")
-                                           ] []
-                                  ]
-              ]
+          viewSpotify urls
 
-      "Soundcloud" -> div [] [] --TODO
-      _ -> div [] []
+      "Soundcloud" ->
+          viewSoundcloud urls
+
+      _ ->
+          div [] []
+
+viewSoundcloud : Urls -> Html
+viewSoundcloud urls =
+    div [ Attr.class "item-urls" ]
+        [ case urls.full of
+            Nothing  ->
+                div [] []
+
+            Just url ->
+                div [ Attr.class "item-url-full" ]
+                    [ iframe [ Attr.class "audio-full"
+                             , Attr.src <| "https://w.soundcloud.com/player/?url=" ++ url
+                             , Attr.style [ ("width", "100%") ]
+                             , Attr.height 166
+                             , Attr.property "framborder" (Encode.string "0")
+                             ] []
+                    ]
+        ]
+
+viewSpotify : Urls -> Html
+viewSpotify urls =
+    div [ Attr.class "item-urls" ]
+        [ case urls.full of
+            Nothing  ->
+                case urls.preview of
+                  Nothing ->
+                      div [] []
+
+                  Just p  ->
+                      div [] [ div [ Attr.class "item-url-preview" ]
+                                   [ audio [ Attr.class "audio-preview"
+                                           , Attr.src p
+                                           , Attr.autoplay False
+                                           , Attr.controls True
+                                           ] []
+                                   ]
+                             , h6 [] [ text trackNotAvailable ]
+                             ]
+            -- https://developer.spotify.com/technologies/widgets/spotify-play-button/
+            Just url ->
+                div [ Attr.class "item-url-full" ]
+                    [ iframe [ Attr.class "audio-full"
+                             , Attr.src <| "https://embed.spotify.com/?uri=" ++ url
+                             , Attr.width 300
+                             , Attr.height 80
+                             , Attr.property "allowtransparency" (Encode.string "true")
+                             , Attr.property "framborder" (Encode.string "0")
+                             ] []
+                    ]
+        ]
 
 
 toLogo : Service -> FilePath
@@ -196,7 +223,13 @@ toLogo dp =
       "Spotify" -> "../../../assets/spotify.jpeg"
       _       -> "" -- TODO: provide default img
 
+trackNotAvailable : String
+trackNotAvailable =
+    "(Not available in your country. You can just listen to a preview)"
 
+noResults : String -> String -> String
+noResults service searchTerm =
+    ("No results on " ++ service ++ " for: \'" ++ searchTerm ++ "\'")
 -- UPDATE
 updateMailbox : Mailbox Update
 updateMailbox =
