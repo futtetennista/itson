@@ -90,7 +90,7 @@ styleItemList =
 -- VIEWS
 view : (Int, Int) -> Request -> List Fragment -> Html
 view (h, w) model fragments =
-    let resultsView = case ofragments of
+    let resultsView = case fragments of
                         [] -> div [ Attr.class "empty-space" ] []
                         _  -> div [ Attr.class "results" ] (List.map3 viewFragment [ (h, w), (h, w) ] [ model.searchTerm, model.searchTerm ] fragments)
     in div [ Attr.class "content"
