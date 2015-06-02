@@ -53,7 +53,7 @@ type CountryCode = String
 
 
 $(deriveJSON defaultOptions{ fieldLabelModifier = drop 1} ''Type)
-$(deriveJSON defaultOptions ''Urls)
+$(deriveJSON defaultOptions{ omitNothingFields = True } ''Urls)
 $(deriveJSON defaultOptions{ constructorTagModifier = map toLower
                            , sumEncoding = defaultTaggedObject{ tagFieldName = "type" }
                            } ''Item)
