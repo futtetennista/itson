@@ -1,72 +1,90 @@
-module Homepage where
+module Homepage exposing (..)
 
-import Debug (..)
-import Text as T
-import Window as W
-import Signal as S
-import String (isEmpty, join)
-import Http
-import Json.Decode (Decoder, customDecoder, decodeString
-                   , object2, object4, maybe, (:=)
-                   , string , map, list)
+import Debug exposing (..)
+-- import Text as T
+import String exposing (isEmpty, join)
+import Json.Decode exposing (Decoder
+                            , customDecoder
+                            , decodeString
+                            , object2
+                            , object4
+                            , maybe
+                            , (:=)
+                            , string
+                            , map
+                            , list
+                            )
 import Json.Encode as Encode
 import List
-import Keyboard
-import Html (..)
+import Html exposing (..)
+import Html.App as App
 import Html.Attributes as Attr
-import Html.Events (..)
-import Html.Lazy (lazy)
+import Html.Events exposing (..)
+import Html.Lazy exposing (lazy)
 import Time
 
+main : Program Never
+main =
+    App.program { init = init, update = , subscriptions = , view = }
 
 -- MODELS
-type alias Service = String
+type alias Service =
+    String
 
-type alias Urls = { full    : Maybe String
-                  , preview : String
-                  }
+type alias Urls =
+    { full    : Maybe String
+    ,  preview : String
+    }
 
-type alias Item = { title   : String
-                  , album   : String
-                  , artists : List String
-                  , urls    : Urls
-                  }
+type alias Item =
+    { title   : String
+    , album   : String
+    , artists : List String
+    , urls    : Urls
+    }
 
-type alias Fragment = { service  : Service
-                      , items    : List Item
-                      }
+type alias Fragment =
+    { service  : Service
+    , items    : List Item
+    }
 
 emptyUrls : Urls
-emptyUrls = { full = Nothing
-            , preview = ""
-            }
+emptyUrls =
+    { full = Nothing
+    , preview = ""
+    }
 
 emptyItem : Item
-emptyItem = { title  = ""
-            , album  = ""
-            , artists = []
-            , urls   = emptyUrls
-            }
+emptyItem =
+    { title  = ""
+    , album  = ""
+    , artists = []
+    , urls   = emptyUrls
+    }
 
+init : (Item, Cmd msg)
+init =
+    (emptyItem, Cmd.none)
+    
 type alias Request =
     { searchTerm   : String
     , sendAttempts : Int
     }
 
-type Update = Term String
-            | Search
-            | NoOp
-
 emptyRequest : Request
-emptyRequest = { searchTerm   = ""
-               , sendAttempts = 0
-               }
+emptyRequest =
+    { searchTerm   = ""
+    , sendAttempts = 0
+    }
 
 update : Update -> Request -> Request
 update u m =
     case u of
-      Term content -> { m | searchTerm <- content }
-      Search       -> { m | sendAttempts <- m.sendAttempts + 1 }
+      Term content ->
+          { m | searchTerm <- content }
+
+      Search ->
+          { m | sendAttempts <- m.sendAttempts + 1 }
 
 type alias FilePath = String
 
@@ -194,6 +212,11 @@ toLogo dp =
 
 
 -- UPDATE
+type Msg =
+    Term String
+    | Search
+    | NoOp
+
 updateCh : S.Channel Update
 updateCh = S.channel NoOp
 
@@ -255,8 +278,3 @@ fragment =
 resultsList : Decoder (List Fragment)
 resultsList =
     "results" := (list fragment)
-
-
-main : Signal Html
-main =
-    S.map3 view W.dimensions model results
